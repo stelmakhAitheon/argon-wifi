@@ -819,7 +819,7 @@ inline int Muxer<StreamT, MutexT>::processTimeouts() {
         // }
     }
     // addMessage("TROLOLO", true);
-    // Logger::getInstance()->addMessage("TROLOLO\r\n");
+    Logger::getInstance()->addMessage("TROLOLO\r\n");
     
     // addMessage("processTimeouts n = " + std::to_string(n), true);
 
