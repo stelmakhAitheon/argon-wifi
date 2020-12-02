@@ -1,0 +1,35 @@
+{
+    "config": {
+        "network-interface": {
+            "help": "Options are ETHERNET, WIFI_ESP8266, WIFI_BP3595, WIFI_ESP32, NO_CONNECT",
+            "value": "WIFI_ESP32"
+        },
+        "wifi-ssid": {
+            "help": "WiFi SSID",
+            "value": "\"TVTEST\""
+        },
+        "wifi-password": {
+            "help": "WIFI Password",
+            "value": "\"12345678\""
+        },
+        "wifi-security": {
+            "help": "Options are NSAPI_SECURITY_WEP, NSAPI_SECURITY_WPA, NSAPI_SECURITY_WPA2, NSAPI_SECURITY_WPA_WPA2",
+            "value": "NSAPI_SECURITY_WPA_WPA2"
+        }
+    },
+    "target_overrides": {
+        "*": {
+            "target.components_add": ["WIFI_ESP32"],
+            "network-interface": "WIFI_ESP32",
+            "target.features_add": ["BLE"],
+            "esp32.wifi-en" : "P0_24",
+            "esp32.wifi-io0": "P0_16",
+            "esp32.wifi-tx" : "P1_5",
+            "esp32.wifi-rx" : "P1_4",
+            "esp32.wifi-rts": "P1_7",
+            "esp32.wifi-cts": "P1_6",
+            "esp32.wifi-baudrate": 921600,    
+            "esp32.provide-default": true
+        }
+    }
+}

@@ -1,0 +1,133 @@
+static volatile int n = 0;
+static UARTSerial serial(P1_5, P1_4, 921600);
+DigitalOut wifi_en(P0_24);
+DigitalOut wifi_boot(P0_16);
+Thread thread_print;
+Thread thread_wifi;
+Thread thread_read_wifi;
+Thread thread_read_usb;
+TestWifi wifi;
+
+
+void read_usb_func() {
+    while(true) {
+        std::string newMessage = "";
+        while(usb.readable()) {
+            n++;
+            char c = usb.getc();
+            newMessage.push_back(c);
+        }
+        if(newMessage.size() > 0)
+            usb.printf(newMessage.c_str());
+        ThisThread::sleep_for(1000);
+    }
+}
+
+void usb_func() {
+    // lock.lock();
+    // n++;
+    // lock.unlock();
+    // if(usb.readable()) {
+    //     char c = usb.getc();
+    //     message.push_back(c);
+    //     // if(c == '\n') {
+    //         usb.printf("get command = %s", message.c_str());
+    //         // message = "";
+    //     // }
+    // }
+}
+
+
+void serial_func() {
+    n++;
+
+    // if(serial.readable()) {
+    // serial.getc();
+    // }
+    // usb.printf("ppc\r\n");
+}
+
+void read_wifi_func() {
+    while(true) {
+        int i = 0;
+        if(serial.readable()) {
+            while (serial.readable()) {
+                lock.lock();
+                n++;
+                char symbol[2] = {0};
+                serial.read(symbol, 1);
+                message.push_back(symbol[0]);
+                lock.unlock();
+            }
+        }
+        ThisThread::sleep_for(100);
+    }
+}
+
+void wifi_func() {
+    // usb.attach(&usb_func);
+    lock.lock();
+    usb.printf("WIFI START!!!\r\n");
+    serial.set_flow_control(SerialBase::RTSCTS, P1_7, P1_6);
+    lock.unlock();
+    // serial.attach(&serial_func);
+
+    wifi_en.write(0);
+    ThisThread::sleep_for(1000);
+    wifi_boot.write(1);
+    wifi_en.write(1);
+    ThisThread::sleep_for(1000);
+
+
+}
+
+
+
+    
+
+// #define FILESYSTEM_NAME "littlefs"
+//     FlashIAPBlockDevice blockDevice(PY_FLASH_ADDRESS_START, PY_FLASH_SIZE - PY_FLASH_ADDRESS_START);
+//     LittleFileSystem2 fileSystem(FILESYSTEM_NAME);
+
+
+//     int error = fileSystem.mount(&blockDevice);
+//     if(error != 0) {
+//         printf("fail mount with code %d\r\n", error);
+//         return false;
+//     } else {
+//         printf("device mounted\r\n");
+//     }
+
+//     DIR *d = opendir("/littlefs/");
+//     printf("%s\n", (!d ? "Fail :(" : "OK"));
+//     if (!d) {
+//         // error("error: %s (%d)\n", strerror(errno), -errno);
+//     }
+
+//     printf("root directory:\n");
+//     while (true) {
+//         struct dirent *e = readdir(d);
+//         if (!e) {
+//             break;
+//         }
+//         printf("    %s\n", e->d_name);
+//     }
+
+//     FILE *f = fopen("/littlefs/test.txt", "r+");
+//     printf("%s\n", (!f ? "Fail :(" : "OK"));
+//     printf("numbers:\n");
+//     while (!feof(f)) {
+//         int c = fgetc(f);
+//         printf("%c", c);
+//     }
+
+
+    // queue.call_every(2000, [&wifi, &led] {
+    //     led = !led;
+    //     // lock.lock();
+    //     usb.printf("HELLO n = %d\r\n", n);
+    //     // lock.unlock();
+    //     usb.printf("message = %s\r\n", message.c_str());
+    //     // printf("%s\r\n", wifi.message.c_str());
+    //     // serial.printf("hello\r\n");
+    // });
