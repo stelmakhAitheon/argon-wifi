@@ -39,31 +39,30 @@ std::string Logger::format(const char *fmt, ...) {
 }
 
 Logger::Logger() {
+    _count = 0;
+    _queue.call_every(2000, callback(this, &Logger::internalPrintMessages));
     _queueThread.start(&_queue, &EventQueue::dispatch_forever);
 }
 
-void Logger::internalAddMessage(std::string *message) {
-    // _messages.push_back("HAHA\r\n");
-    // return;
-    // if(!message)
-    //     return;
-    _messages.push_back(*message);
-    delete message;
+void Logger::internalAddMessage(std::string message) {
+    _messages.push_back(message);
 }
 
 void Logger::internalPrintMessages() {
     for(auto it = _messages.begin(); it != _messages.end(); it++) {
         printf(it->c_str());
     }
-    printf("------PRINT-------\r\n");
+    printf("------PRINT IN TIME %d-------\r\n", (int)Common::getInstance()->getMillis());
 }
 
 void Logger::addMessage(const char *message, ...) {
-    // return;
+    if(_count >= 100)
+        return;
+    _count++;
     va_list args;
     va_start(args, message);
     _queue.call(this, &Logger::internalAddMessage, 
-        new std::string(format("[THREADID=%p]%s", ThisThread::get_id(), internalFormat(message, args).c_str())));
+        format("[THREADID=%p]%s", ThisThread::get_id(), internalFormat(message, args).c_str()));
 }
 
 void Logger::printMessages() {

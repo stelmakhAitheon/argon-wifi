@@ -29,7 +29,7 @@
 #ifdef GSM0710_ENABLE_DEBUG_LOGGING
 #define GSM0710_LOG_DEBUG(_level, _fmt, ...) LOG_DEBUG(_level, _fmt, ##__VA_ARGS__)
 #else
-#define GSM0710_LOG_DEBUG(_level, _fmt, ...) LOG(INFO, _fmt, ##__VA_ARGS__)
+#define GSM0710_LOG_DEBUG(_level, _fmt, ...)
 #endif // GSM0710_ENABLE_DEBUG_LOGGING
 
 namespace gsm0710 {
@@ -71,6 +71,7 @@ template<typename StreamT, typename MutexT>
 inline Muxer<StreamT, MutexT>::~Muxer() {
 }
 
+
 template<typename StreamT, typename MutexT>
 void Muxer<StreamT, MutexT>::streamStateChanged() {
     eventsStream_.set(EVENT_INPUT_DATA);
@@ -100,7 +101,6 @@ inline int Muxer<StreamT, MutexT>::notifyInput(size_t size) {
 template<typename StreamT, typename MutexT>
 inline int Muxer<StreamT, MutexT>::start(bool initiator, bool openZeroChannel) {
     stop();
-
     LOG(INFO, "Starting GSM07.10 muxer");
 
     {
@@ -127,33 +127,36 @@ inline int Muxer<StreamT, MutexT>::start(bool initiator, bool openZeroChannel) {
             chan.reset();
         }
 
-// change to nothing
-//         if (!events_) {
-// #ifndef GSM0710_SHARED_STREAM_EVENT_GROUP
-//             events_ = xEventGroupCreate();
-//             CHECK_TRUE(events_, GSM0710_ERROR_NO_MEMORY);
-// #else
-//             events_ = stream_->eventGroup();
-//             CHECK_TRUE(events_, GSM0710_ERROR_INVALID_STATE);
-// #endif // GSM0710_SHARED_STREAM_EVENT_GROUP
-//         }
+        // return 0;
+        
 
-//         if (!channelEvents_) {
-//             channelEvents_ = xEventGroupCreate();
-//             CHECK_TRUE(channelEvents_, GSM0710_ERROR_NO_MEMORY);
-//         }
+    //         if (!events_) {
+    // #ifndef GSM0710_SHARED_STREAM_EVENT_GROUP
+    //             events_ = xEventGroupCreate();
+    //             CHECK_TRUE(events_, GSM0710_ERROR_NO_MEMORY);
+    // #else
+    //             events_ = stream_->eventGroup();
+    //             CHECK_TRUE(events_, GSM0710_ERROR_INVALID_STATE);
+    // #endif // GSM0710_SHARED_STREAM_EVENT_GROUP
+    //         }
+        stream_->sigio(callback(this, &Muxer::streamStateChanged));
+        SerialUtil::skipAll(stream_, 1000);
+        events_.clear();
+        // if (!channelEvents_) {
+        //     channelEvents_ = xEventGroupCreate();
+        //     CHECK_TRUE(channelEvents_, GSM0710_ERROR_NO_MEMORY);
+        // }
 
         // xEventGroupClearBits(events_, EVENT_MAX - 1);
-        eventsStream_.clear();
-        channelEvents_.clear();
-        events_.clear();
-        stream_->sigio(callback(this, &Muxer::streamStateChanged));
-
         // xEventGroupClearBits(channelEvents_,
-                // ((EVENT_STATE_CHANGED << ((sizeof(channels_) / sizeof(channels_[0])) + 1)) - 1));
+        //         ((EVENT_STATE_CHANGED << ((sizeof(channels_) / sizeof(channels_[0])) + 1)) - 1));
 
+        channelEvents_.clear();
         state_ = State::Stopped;
         transition(State::Starting);
+
+
+        thread_.start(callback(this, &Muxer::run));
 
         // Start thread
         // if (pdPASS != xTaskCreate([](void* arg) -> void {
@@ -164,40 +167,34 @@ inline int Muxer<StreamT, MutexT>::start(bool initiator, bool openZeroChannel) {
         //     transition(State::Error);
         //     return GSM0710_ERROR_UNKNOWN;
         // }
-        thread_.start(callback(this, &Muxer::run));
-    }
+        
 
+    }
     if (initiator && openZeroChannel) {
         return openChannel(0);
     }
-
     return 0;
 }
 
 template<typename StreamT, typename MutexT>
 inline int Muxer<StreamT, MutexT>::stop() {
-    if (!isRunning() && thread_.get_state() == rtos::Thread::State::Deleted) {
-        return GSM0710_ERROR_NONE;
-    }
 
     LOG(INFO, "Stopping GSM07.10 muxer");
+    // addMessage("Stopping GSM07.10 muxer", true);
 
     if (isRunning()) {
-        // xEventGroupSetBits(events_, EVENT_STOP);
-        events_.set(EVENT_STOP);
+        thread_.terminate();
     }
-    // xEventGroupWaitBits(events_, EVENT_STOPPED, pdTRUE, pdFALSE, portMAX_DELAY);
-    events_.wait_any(EVENT_STOPPED);
-
-    // thread_ = nullptr;
 
     LOG(INFO, "GSM07.10 muxer stopped");
+    // addMessage("GSM07.10 muxer stopped", true);
 
     return 0;
 }
 
 template<typename StreamT, typename MutexT>
 inline bool Muxer<StreamT, MutexT>::isRunning() {
+    // Logger::getInstance()->addMessage("isRunning\r\n");
     return state_ != State::Stopped && state_ != State::Error;
 }
 
@@ -212,16 +209,9 @@ inline int Muxer<StreamT, MutexT>::ping() {
     {
         std::lock_guard<MutexT> lk(mutex_);
         lastKeepAlive_ = std::numeric_limits<decltype(lastKeepAlive_)>::min();
-        // xEventGroupClearBits(events_, EVENT_PING);
-        events_.clear(EVENT_PING);
+        xEventGroupClearBits(events_, EVENT_PING);
     }
     xEventGroupSetBits(events_, EVENT_WAKEUP);
-    // FIXME:
-    // auto bits = xEventGroupWaitBits(events_, EVENT_PING, pdTRUE, pdFALSE, getControlResponseTimeout() / portTICK_RATE_MS);
-    auto bits = events_.wait_any(EVENT_PING, getControlResponseTimeout(), true);
-    if (bits & EVENT_PING) {
-        return 0;
-    }
 
     return GSM0710_ERROR_TIMEOUT;
 }
@@ -295,12 +285,14 @@ template<typename StreamT, typename MutexT>
 inline int Muxer<StreamT, MutexT>::openChannel(uint8_t channel, ChannelDataHandler handler, void* ctx) {
     CHECK_TRUE(!isStopping(), GSM0710_ERROR_INVALID_STATE);
     auto c = getChannel(channel);
-
+    Logger::getInstance()->addMessage("openchannel = %d\r\n", channel);
     CHECK_TRUE(c, GSM0710_ERROR_INVALID_ARGUMENT);
-
+    // addMessage("openChannel", true);
     int r = 0;
 
     if (c->state == ChannelState::Closed || c->state == ChannelState::Closing || c->state == ChannelState::Error) {
+        // Logger::getInstance()->addMessage("openchannel Closed Closing Error  %d\r\n", channel);
+        // addMessage("openChannel CLosed", true);
         LOG(INFO, "Openning mux channel %u", channel);
         {
             std::lock_guard<MutexT> lk(mutex_);
@@ -309,10 +301,13 @@ inline int Muxer<StreamT, MutexT>::openChannel(uint8_t channel, ChannelDataHandl
             c->timestamp = 0;
             c->retries = 0;
             if (handler != nullptr) {
+                // addMessage("openChannel handler", true);
                 c->handler = handler;
                 c->handlerCtx = ctx;
             }
         }
+        // addMessage("openChannel waitChannelState", true);
+        Logger::getInstance()->addMessage("openchannel waitChannelState\r\n");
         r = waitChannelState(c, ChannelState::Opened);
         if (!r) {
             // Automatically resume channel
@@ -403,7 +398,6 @@ inline int Muxer<StreamT, MutexT>::suspendChannel(uint8_t channel) {
         auto newState = c->localModemState | proto::FC;
 #ifdef GSM0710_FLOW_CONTROL_RTR
         newState &= ~(proto::RTR);
-        //need solve
 #endif // GSM0710_FLOW_CONTROL_RTR
         if (newState != c->localModemState) {
             c->localModemState = newState;
@@ -411,8 +405,7 @@ inline int Muxer<StreamT, MutexT>::suspendChannel(uint8_t channel) {
         }
     }
     if (update) {
-        // xEventGroupSetBits(events_, EVENT_WAKEUP);
-        events_set(EVENT_WAKEUP);
+        xEventGroupSetBits(events_, EVENT_WAKEUP);
     }
 
     return 0;
@@ -437,7 +430,6 @@ inline int Muxer<StreamT, MutexT>::resumeChannel(uint8_t channel) {
         }
     }
     if (update) {
-        // xEventGroupSetBits(events_, EVENT_WAKEUP);
         events_.set(EVENT_WAKEUP);
     }
 
@@ -467,8 +459,8 @@ inline int Muxer<StreamT, MutexT>::waitWritable(Channel* chan, unsigned int time
                 chan->state != ChannelState::Error && chan->state != ChannelState::Closed) {
             int toWait = timeout - (portable::getMillis() - t1);
             if (toWait > 0) {
-                // xEventGroupWaitBits(channelEvents_, EVENT_STATE_CHANGED << chan->channel, pdTRUE, pdFALSE, toWait / portTICK_RATE_MS);
                 channelEvents_.wait_any(EVENT_STATE_CHANGED << chan->channel, toWait, true);
+                // xEventGroupWaitBits(channelEvents_, EVENT_STATE_CHANGED << chan->channel, pdTRUE, pdFALSE, toWait / portTICK_RATE_MS);
                 if ((chan->remoteModemState & (proto::RTR | proto::FC)) == proto::RTR) {
                     return 0;
                 }
@@ -488,73 +480,68 @@ inline int Muxer<StreamT, MutexT>::setChannelStateHandler(ChannelStateHandler ha
 }
 
 template<typename StreamT, typename MutexT>
-void Muxer<StreamT, MutexT>::run() {
+ void Muxer<StreamT, MutexT>::run() {
     LOG(INFO, "GSM07.10 muxer thread started");
     transition(State::Idle);
 
+    int i = 0;
     while (state_ != State::Stopped && state_ != State::Error) {
+        Logger::getInstance()->addMessage("\r\nrun %d\r\n", i);
+        
         auto nextTimeout = processTimeouts();
         if (nextTimeout < 0) {
             transition(State::Error);
             break;
         }
 
-// #ifdef GSM0710_PUMP_INPUT_DATA
-//         nextTimeout = std::min(nextTimeout, GSM0710_PUMP_INPUT_DATA);
-// #endif
+        Timer timer;
+        timer.start();
+        auto ev = events_.wait_any(EVENT_INPUT_DATA | EVENT_STOP | EVENT_WAKEUP, nextTimeout, true);
+        timer.stop();
+        Logger::getInstance()->addMessage("run wait time = %dus ev=%d\r\n", timer.read_us(), (int)ev);
 
-// #ifndef GSM0710_SHARED_STREAM_EVENT_GROUP
-//         auto ev = xEventGroupWaitBits(events_, EVENT_INPUT_DATA | EVENT_STOP | EVENT_WAKEUP, pdTRUE,
-//                 pdFALSE, nextTimeout / portTICK_RATE_MS);
-// #else
-//         auto ev = stream_->waitEvent(EVENT_INPUT_DATA | EVENT_STOP | EVENT_WAKEUP, nextTimeout);
-//         if (ev < 0) {
-//             transition(State::Error);
-//             break;
-//         }
-// #endif // GSM0710_SHARED_STREAM_EVENT_GROUP
-        auto ev = eventsStream_.wait_any(EVENT_INPUT_DATA | EVENT_STOP | EVENT_WAKEUP, nextTimeout, true);
-        
         if(ev & osFlagsError) {
             ev = 0;
         }
 
         if ((ev & EVENT_STOP) || stopping_) {
-            stopMuxer();
+            Logger::getInstance()->addMessage("run stopMuxer\r\n");
+            // stopMuxer();
         }
 
         if (ev & EVENT_WAKEUP) {
-            GSM0710_LOG_DEBUG(TRACE, "Woken up");
-            nextTimeout = processTimeouts();
-            if (nextTimeout < 0) {
-                transition(State::Error);
-                break;
-            }
+            Logger::getInstance()->addMessage("run EVENT_WAKEUP\r\n");
+            // GSM0710_LOG_DEBUG(TRACE, "Woken up");
+            // nextTimeout = processTimeouts();
+            // if (nextTimeout < 0) {
+            //     transition(State::Error);
+            //     break;
+            // }
         }
 
-// #if !defined(GSM0710_PUMP_INPUT_DATA)
         if (ev & EVENT_INPUT_DATA) {
-// #else
-        // {
-// #endif // !defined(GSM0710_PUMP_INPUT_DATA)
+            Logger::getInstance()->addMessage("run EVENT_INPUT_DATA\r\n");
             if (processInputData() < 0) {
                 transition(State::Error);
                 break;
             }
         }
+        
+        i++;
+        if(i >= 7)
+            break;
     }
 
-    LOG(INFO, "GSM07.10 muxer thread exiting");
+    // LOG(INFO, "GSM07.10 muxer thread exiting");
 
     if (state_ == State::Error) {
+        Logger::getInstance()->addMessage("run state ERROR\r\n");
         // Notify that all the currently opened channels have closed
-        forceClose();
+        // forceClose();
     }
-
-    // xEventGroupSetBits(events_, EVENT_STOPPED);
+    Logger::getInstance()->addMessage("run set state  EVENT_STOPPED\r\n");
     events_.set(EVENT_STOPPED);
-
-    // return 0;
+    Logger::getInstance()->addMessage("isRunning = %d\r\n", isRunning());
 }
 
 template<typename StreamT, typename MutexT>
@@ -607,21 +594,30 @@ inline void Muxer<StreamT, MutexT>::forceClose() {
 
 template<typename StreamT, typename MutexT>
 inline int Muxer<StreamT, MutexT>::processInputData() {
+    Logger::getInstance()->addMessage("processInputData\r\n");
     size_t newData = CHECK(stream_->read((char*)inBuf_.get() + inBufData_, inBufSize_ - inBufData_));
     if (newData > 0) {
-        GSM0710_LOG_DEBUG(TRACE, "New data to process %u", newData);
-        inBufData_ += newData;
+        // Logger::getInstance()->addMessage("New data to process %u\r\n", newData);
+        inBufData_ += (newData);
     }
 
     bool forceExit = false;
 
+    // Logger::getInstance()->addMessage("toParse() = %d forceExit = %d Stopped = %d\r\n", (int)toParse(), (int)forceExit, (int)(state_ == State::Stopped));
+    int i = 0;
     while (toParse() > 0 && !forceExit && state_ != State::Stopped) {
         int channelDataResult = 0;
-        GSM0710_LOG_DEBUG(TRACE, "Data in buffer = %u, parser position = %u", inBufData_, inBufParserPos_);
+        // Logger::getInstance()->addMessage("Data in buffer = %u, parser position = %u\r\n", inBufData_, inBufParserPos_);
+        bool exit = false;
+        // if(i >= 2)
+        //     exit = true;
+
         switch (state_) {
             case State::Idle: {
+                // Logger::getInstance()->addMessage("processInputData IDLE FLAG\r\n");
                 auto pos = findCharacter(proto::BASIC_FLAG);
                 if (pos >= 0) {
+                    // Logger::getInstance()->addMessage("processInputData pos = %d\r\n", (int)pos);
                     // Consume everything up to the flag
                     if (pos > 0) {
                         consume(pos);
@@ -630,18 +626,26 @@ inline int Muxer<StreamT, MutexT>::processInputData() {
                     frame_ = {};
                 } else {
                     // Skip anything we've received so far
+                    // Logger::getInstance()->addMessage("processInputData skipAll\r\n");
                     consume(inBufData_);
                 }
                 break;
             }
+            
 
             case State::Flag: {
-                GSM0710_LOG_DEBUG(TRACE, "Found flag byte");
+                // Logger::getInstance()->addMessage("processInputData Found flag byte\r\n");
+                
                 // Skip any additional repeated flags
                 auto fpos = findCharacter(proto::BASIC_FLAG);
+                
                 if (fpos == 0) {
                     // Mark flag byte as parsed
+                    // Logger::getInstance()->addMessage("processInputData flag byte pos = %d\r\n", (int)fpos);
+                    if(i >= 1)
+                        return 0;
                     parsed(1);
+
                 } else {
                     // Consume repeated bytes
                     if (inBufParserPos_ > 1) {
@@ -649,10 +653,13 @@ inline int Muxer<StreamT, MutexT>::processInputData() {
                     }
                     transition(State::Address);
                 }
+                
+                
                 break;
             }
 
             case State::Address: {
+                // Logger::getInstance()->addMessage("processInputData Found Address byte\r\n");
                 frame_.address = *curBuf();
                 // Mark address byte as parsed
                 parsed(1);
@@ -660,26 +667,30 @@ inline int Muxer<StreamT, MutexT>::processInputData() {
                     // EA bit should have been set to 1
                     // Consume erroneous flag and address bytes
                     // Go back to Idle state
-                    GSM0710_LOG_DEBUG(ERROR, "Invalid address, EA bit is not set (%02x)", frame_.address);
+                    // Logger::getInstance()->addMessage("Invalid address, EA bit is not set (%02x)\r\n", frame_.address);
+
                     consume(2);
                     transition(State::Idle);
                 } else {
-                    GSM0710_LOG_DEBUG(TRACE, "Address: %02x (%u)", frame_.address, frame_.address >> 2);
+                    // Logger::getInstance()->addMessage("Address: %02x (%u)\r\n", frame_.address, frame_.address >> 2);
                     transition(State::Control);
                 }
                 break;
             }
 
             case State::Control: {
+                // Logger::getInstance()->addMessage("processInputData Found Control byte\r\n");
                 frame_.control = *curBuf();
                 // Mark control byte as parsed
                 parsed(1);
-                GSM0710_LOG_DEBUG(TRACE, "Control: %02x", frame_.control);
+                // Logger::getInstance()->addMessage("Control: %02x\r\n", frame_.control);
                 transition(State::Length1);
                 break;
             }
 
+
             case State::Length1: {
+                // Logger::getInstance()->addMessage("processInputData Found Length1 byte\r\n");
                 frame_.length = *curBuf() >> 1;
                 if (!(*curBuf() & proto::EA)) {
                     // Extension bit not present, there is another length byte
@@ -689,10 +700,10 @@ inline int Muxer<StreamT, MutexT>::processInputData() {
                     frame_.hlen = 4;
                     // Single-byte length field
                     // Validate length
-                    GSM0710_LOG_DEBUG(TRACE, "Length: %u, total %u", frame_.length, frame_.hlen + frame_.length + 1);
+                    // Logger::getInstance()->addMessage("Length: %u, total %u\r\n", frame_.length, frame_.hlen + frame_.length + 1);
                     if ((frame_.length + frame_.hlen + 1) > inBufSize_) {
                         // The frame will not fit, consume any read data, go back into Idle state
-                        GSM0710_LOG_DEBUG(ERROR, "Received frame will not fit into internal buffer");
+                        Logger::getInstance()->addMessage("Received frame will not fit into internal buffer\r\n");
                         consume(inBufData_);
                         transition(State::Idle);
                         break;
@@ -706,6 +717,7 @@ inline int Muxer<StreamT, MutexT>::processInputData() {
             }
 
             case State::Length2: {
+                // Logger::getInstance()->addMessage("processInputData Found Length2 byte\r\n");
                 frame_.length |= ((size_t)*curBuf()) << 7;
                 parsed(1);
                 GSM0710_LOG_DEBUG(TRACE, "Length2: %u, total %u", frame_.length, frame_.hlen + frame_.length + 1);
@@ -723,6 +735,7 @@ inline int Muxer<StreamT, MutexT>::processInputData() {
             }
 
             case State::Data: {
+                // Logger::getInstance()->addMessage("processInputData Found Data byte\r\n");
                 if (toParse() >= frame_.length) {
                     // Mark frame data as parsed
                     frame_.data = curBuf();
@@ -735,6 +748,7 @@ inline int Muxer<StreamT, MutexT>::processInputData() {
             }
 
             case State::Fcs: {
+                // Logger::getInstance()->addMessage("processInputData Found Fcs byte\r\n");
                 frame_.fcs = *curBuf();
                 // Mark FCS byte as parsed
                 parsed(1);
@@ -742,7 +756,7 @@ inline int Muxer<StreamT, MutexT>::processInputData() {
                     // Valid frame, process frame data
                     channelDataResult = processChannelData();
                 } else {
-                    GSM0710_LOG_DEBUG(ERROR, "Invalid FCS");
+                    Logger::getInstance()->addMessage("Invalid FCS\r\n");
                 }
 
                 // Consume all the parsed data
@@ -754,31 +768,39 @@ inline int Muxer<StreamT, MutexT>::processInputData() {
                 break;
             }
 
+
             default: {
-                return GSM0710_ERROR_INVALID_STATE;
+                Logger::getInstance()->addMessage("processInputData other FLAG\r\n");
+                exit = true;
+                break;
             }
+
+            // default: {
+            //     return GSM0710_ERROR_INVALID_STATE;
+            // }
         }
 
         if (state_ == State::Idle) {
+            // Logger::getInstance()->addMessage("processInputData FAIL IDLE\r\n");
+            
             // There is some critical stuff we might need to do while we are parsing incoming data
             while (isRunning() && CHECK(processTimeouts()) == 0) {
             }
-// #ifdef GSM0710_RELAX_WHEN_CHANNEL_IN_FLOW_CONTROL
-//             if (channelDataResult == GSM0710_ERROR_FLOW_CONTROL) {
-//                 // Not an error, we need to relax a bit.
-//                 // Waiting for a wakeup or up to GSM0710_RELAX_WHEN_CHANNEL_IN_FLOW_CONTROL ms
-//                 xEventGroupWaitBits(events_, EVENT_WAKEUP, pdFALSE, pdFALSE, GSM0710_RELAX_WHEN_CHANNEL_IN_FLOW_CONTROL / portTICK_RATE_MS);
-                
-//             }
-// #endif // GSM0710_RELAX_WHEN_CHANNEL_IN_FLOW_CONTROL
 
             if (channelDataResult == GSM0710_ERROR_FLOW_CONTROL) {
+                Logger::getInstance()->addMessage("processInputData GSM0710_ERROR_FLOW_CONTROL\r\n");
+                exit = true;
                 // Not an error, we need to relax a bit.
                 // Waiting for a wakeup or up to GSM0710_RELAX_WHEN_CHANNEL_IN_FLOW_CONTROL ms
                 // xEventGroupWaitBits(events_, EVENT_WAKEUP, pdFALSE, pdFALSE, GSM0710_RELAX_WHEN_CHANNEL_IN_FLOW_CONTROL / portTICK_RATE_MS);
-                events_.wait_any(EVENT_WAKEUP, 1000, false);
-            }   
+            }
+            // Logger::getInstance()->addMessage("processInputData AFTER FAIL\r\n");
+            // exit = true;
+            i++;
         }
+
+        if(exit)
+            break;
     }
 
     return 0;
@@ -786,16 +808,7 @@ inline int Muxer<StreamT, MutexT>::processInputData() {
 
 template<typename StreamT, typename MutexT>
 inline int Muxer<StreamT, MutexT>::processTimeouts() {
-    // xEventGroupClearBits(events_, EVENT_WAKEUP);
     events_.clear(EVENT_WAKEUP);
-
-    if (!initiator_ && getChannel(0)->state != ChannelState::Opened && !isStopping()) {
-        // FIXME: for now returning T1 / 2
-        if (toParse() > 0) {
-            return 1;
-        }
-        return getAckTimeout() / 2;
-    }
 
     std::lock_guard<MutexT> lk(mutex_);
 
@@ -804,50 +817,54 @@ inline int Muxer<StreamT, MutexT>::processTimeouts() {
     for (unsigned c = 0; c < sizeof(channels_) / sizeof(channels_[0]); c++) {
         auto chan = &channels_[c];
         if (chan->state == ChannelState::Closing || chan->state == ChannelState::Opening) {
-            // Transitive state
-            if ((portable::getMillis() - chan->timestamp) >= getAckTimeout()) {
+            Logger::getInstance()->addMessage("processTimeouts channel = %d state = %d\r\n", 
+                c, chan->state == ChannelState::Opening);
+            if ((Common::getInstance()->getMillis() - chan->timestamp) >= getAckTimeout()) {
                 if (chan->retries++ < getMaxRetransmissions()) {
                     if (chan->state == ChannelState::Closing) {
-                        GSM0710_LOG_DEBUG(TRACE, "(%d/%d) Trying to close channel %u",
-                                chan->retries, getMaxRetransmissions(), chan->channel);
-                        CHECK(commandSend(c, proto::DISC | proto::PF));
+                        Logger::getInstance()->addMessage("processTimeouts ChannelState::Closing\r\n"); 
+                        // CHECK(commandSend(c, proto::DISC | proto::PF));
                     } else {
-                        GSM0710_LOG_DEBUG(TRACE, "(%d/%d) Trying to open channel %u",
-                                chan->retries, getMaxRetransmissions(), chan->channel);
+                        Logger::getInstance()->addMessage("processTimeouts (%d/%d) Trying to open channel %u\r\n",
+                            chan->retries, getMaxRetransmissions(), chan->channel);        
                         CHECK(commandSend(c, proto::SABM | proto::PF));
                     }
-                    chan->timestamp = portable::getMillis();
+                    chan->timestamp = Common::getInstance()->getMillis();
                     timeout = std::min<decltype(timeout)>(timeout, getAckTimeout());
                 } else {
-                    if (chan->state == ChannelState::Closing) {
-                        GSM0710_LOG_DEBUG(ERROR, "Failed to close channel %u", chan->channel);
-                    } else {
-                        GSM0710_LOG_DEBUG(ERROR, "Failed to open channel %u", chan->channel);
-                    }
-                    channelTransition(chan, ChannelState::Error);
+                    Logger::getInstance()->addMessage("processTimeouts > getMaxRetransmissions\r\n");
+                    // if (chan->state == ChannelState::Closing) {
+                    //     GSM0710_LOG_DEBUG(ERROR, "Failed to close channel %u", chan->channel);
+                    // } else {
+                    //     GSM0710_LOG_DEBUG(ERROR, "Failed to open channel %u", chan->channel);
+                    // }
+                    // channelTransition(chan, ChannelState::Error);
                 }
             } else {
-                timeout = std::min<decltype(timeout)>(timeout, getAckTimeout() - (portable::getMillis() - chan->timestamp));
+                timeout = std::min<decltype(timeout)>(timeout, getAckTimeout() - (Common::getInstance()->getMillis() - chan->timestamp));
             }
         } else if (c > 0 && chan->update == true && chan->state == ChannelState::Opened) {
-            if (ctrl_.state != ControlCommand::State::Pending) {
-                chan->update = false;
-                CHECK(modemStatusSend(chan));
-            }
+            Logger::getInstance()->addMessage("processTimeouts channel state 2 = %d\r\n", c);
+        //     if (ctrl_.state != ControlCommand::State::Pending) {
+        //         chan->update = false;
+        //         CHECK(modemStatusSend(chan));
+        //     }
         }
     }
 
     if (initiator_ && getChannel(0)->state == ChannelState::Opened && keepAlivePeriod_ && !stopping_ && ctrl_.state != ControlCommand::State::Pending) {
-        if ((portable::getMillis() - lastKeepAlive_) >= keepAlivePeriod_) {
+        if ((Common::getInstance()->getMillis() - lastKeepAlive_) >= keepAlivePeriod_) {
             if (!useMscKeepAlive_) {
+                Logger::getInstance()->addMessage("processTimeouts controlSend\r\n");
                 CHECK(controlSend(proto::TEST, (const uint8_t*)"abc", 3));
             } else {
+                Logger::getInstance()->addMessage("processTimeouts modemStatusSend\r\n");
                 CHECK(modemStatusSend(getChannel(1)));
             }
-            lastKeepAlive_ = portable::getMillis();
+            lastKeepAlive_ = Common::getInstance()->getMillis();
             timeout = std::min<decltype(timeout)>(timeout, keepAlivePeriod_);
         } else {
-            timeout = std::min<decltype(timeout)>(timeout, keepAlivePeriod_ - (portable::getMillis() - lastKeepAlive_));
+            timeout = std::min<decltype(timeout)>(timeout, keepAlivePeriod_ - (Common::getInstance()->getMillis() - lastKeepAlive_));
         }
     }
 
@@ -859,7 +876,6 @@ inline int Muxer<StreamT, MutexT>::processTimeouts() {
         }
     }
 
-    // FIXME: for now returning up to T1 / 2
     return std::min<int>(timeout, getAckTimeout() / 2);
 }
 
@@ -867,82 +883,96 @@ template<typename StreamT, typename MutexT>
 inline int Muxer<StreamT, MutexT>::processChannelData() {
     std::unique_lock<MutexT> lk(mutex_);
 
+    Logger::getInstance()->addMessage("processChannelData\r\n");
     uint8_t channel = frame_.address >> 2;
-    GSM0710_LOG_DEBUG(TRACE, "New frame on channel %u, control = %02x, length = %u, fcs = %02x",
-            channel, frame_.control, frame_.length, frame_.fcs);
+    Logger::getInstance()->addMessage("processChannelData New frame on channel %u, control = %02x,\r\n length = %u, fcs = %02x\r\n",
+        channel, frame_.control, frame_.length, frame_.fcs);
+
     auto c = getChannel(channel);
     switch (frame_.control) {
         case proto::SABM | proto::PF: {
+            Logger::getInstance()->addMessage("processChannelData SABM PF \r\n");
             GSM0710_LOG_DEBUG(TRACE, "SABM");
-            if (c) {
-                if (!channelTransition(c, ChannelState::Opened)) {
-                    c->retries = 0;
-                    c->timestamp = 0;
-                    c->update = true;
-                    GSM0710_LOG_DEBUG(TRACE, "Channel %u sucessfully opened, replying with UA", channel);
-                    responseSend(channel, proto::UA | proto::PF);
-                } else {
-                    // Denied by channel handler
-                    GSM0710_LOG_DEBUG(TRACE, "Channel %u failed to open due denial in channel handler. Replying with DM", channel);
-                    responseSend(channel, proto::DM | proto::PF);
-                }
-            } else {
-                GSM0710_LOG_DEBUG(WARN, "Received SABM on an unknown channel %u, replying with DM", channel);
-                responseSend(channel, proto::DM | proto::PF);
-            }
+            // if (c) {
+            //     if (!channelTransition(c, ChannelState::Opened)) {
+            //         c->retries = 0;
+            //         c->timestamp = 0;
+            //         c->update = true;
+            //         GSM0710_LOG_DEBUG(TRACE, "Channel %u sucessfully opened, replying with UA", channel);
+            //         responseSend(channel, proto::UA | proto::PF);
+            //     } else {
+            //         // Denied by channel handler
+            //         GSM0710_LOG_DEBUG(TRACE, "Channel %u failed to open due denial in channel handler. Replying with DM", channel);
+            //         responseSend(channel, proto::DM | proto::PF);
+            //     }
+            // } else {
+            //     GSM0710_LOG_DEBUG(WARN, "Received SABM on an unknown channel %u, replying with DM", channel);
+            //     responseSend(channel, proto::DM | proto::PF);
+            // }
             break;
         }
+
         case proto::UA | proto::PF: {
             GSM0710_LOG_DEBUG(TRACE, "UA");
+            Logger::getInstance()->addMessage("processChannelData UA\r\n");
             if (c) {
                 switch (c->state) {
                     case ChannelState::Closing: {
+                        Logger::getInstance()->addMessage("processChannelData closed\r\n");
                         channelTransition(c, ChannelState::Closed);
                         break;
                     }
                     case ChannelState::Opening: {
+                        Logger::getInstance()->addMessage("processChannelData OPENNED\r\n");
                         channelTransition(c, ChannelState::Opened);
                         break;
                     }
                     default: {
-                        GSM0710_LOG_DEBUG(WARN, "Received UA for a channel (%u) in %s state",
+                        // GSM0710_LOG_DEBUG(WARN, "Received UA for a channel (%u) in %s state",
+                        //         c->channel, c->stateName(c->state));
+                        Logger::getInstance()->addMessage("Received UA for a channel (%u) in %s state\r\n",
                                 c->channel, c->stateName(c->state));
                         break;
                     }
                 }
             } else {
-                GSM0710_LOG_DEBUG(WARN, "Received UA on an unknown channel %u, ignoring", channel);
+                Logger::getInstance()->addMessage("processChannelData FAIL!!!!\r\n");
+                // GSM0710_LOG_DEBUG(WARN, "Received UA on an unknown channel %u, ignoring", channel);
             }
             break;
         }
+
         case proto::DM:
         case proto::DM | proto::PF: {
-            GSM0710_LOG_DEBUG(TRACE, "DM");
-            if (c) {
-                channelTransition(c, ChannelState::Closed);
-            } else {
-                GSM0710_LOG_DEBUG(WARN, "Received DM on an unknown channel %u, ignoring", channel);
-            }
+            Logger::getInstance()->addMessage("processChannelData DM PF\r\n");
+            // GSM0710_LOG_DEBUG(TRACE, "DM");
+            // if (c) {
+            //     channelTransition(c, ChannelState::Closed);
+            // } else {
+            //     GSM0710_LOG_DEBUG(WARN, "Received DM on an unknown channel %u, ignoring", channel);
+            // }
             break;
         }
+
         case proto::DISC | proto::PF: {
-            GSM0710_LOG_DEBUG(TRACE, "DISC");
-            if (!c || c->state == ChannelState::Closed) {
-                if (!c) {
-                    GSM0710_LOG_DEBUG(WARN, "Received DISC on an unknown channel %u, replying with DM", channel);
-                } else {
-                    GSM0710_LOG_DEBUG(WARN, "Received DISC for a closed channel %u, replying with DM", channel);
-                }
-                responseSend(channel, proto::DM | proto::PF);
-            } else {
-                channelTransition(c, ChannelState::Closed);
-                GSM0710_LOG_DEBUG(TRACE, "Replying with UA");
-                responseSend(channel, proto::UA | proto::PF);
-                if (channel == 0) {
-                    LOG(INFO, "Muxer channel 0 closed by the other side, exiting multiplexed mode");
-                    forceClose();
-                }
-            }
+            Logger::getInstance()->addMessage("processChannelData DISC PF\r\n");
+            // GSM0710_LOG_DEBUG(TRACE, "DISC");
+            // if (!c || c->state == ChannelState::Closed) {
+            //     if (!c) {
+            //         GSM0710_LOG_DEBUG(WARN, "Received DISC on an unknown channel %u, replying with DM", channel);
+            //     } else {
+            //         GSM0710_LOG_DEBUG(WARN, "Received DISC for a closed channel %u, replying with DM", channel);
+            //     }
+            //     responseSend(channel, proto::DM | proto::PF);
+            // } else {
+            //     channelTransition(c, ChannelState::Closed);
+            //     GSM0710_LOG_DEBUG(TRACE, "Replying with UA");
+            //     responseSend(channel, proto::UA | proto::PF);
+            //     if (channel == 0) {
+            //         LOG(INFO, "Muxer channel 0 closed by the other side, exiting multiplexed mode");
+            //         forceClose();
+            //     }
+            // }
             break;
         }
 
@@ -950,38 +980,44 @@ inline int Muxer<StreamT, MutexT>::processChannelData() {
         case proto::UI:
         case proto::UIH | proto::PF:
         case proto::UI | proto::PF: {
-            GSM0710_LOG_DEBUG(TRACE, "UI/UIH");
-            if (!c || c->state != ChannelState::Opened) {
-                if (!c) {
-                    GSM0710_LOG_DEBUG(WARN, "Received UI/UIH on an unknown channel %u, replying with DM", channel);
-                } else {
-                    GSM0710_LOG_DEBUG(WARN, "Received UI/UIH for a non-open channel %u, replying with DM", channel);
-                }
-                commandSend(channel, proto::DM | proto::PF);
-            } else {
-                if (channel > 0) {
-                    if (c->handler) {
-                        auto h = c->handler;
-                        auto ctx = c->handlerCtx;
-                        lk.unlock();
-                        h(frame_.data, frame_.length, ctx);
-                    } else {
-                        GSM0710_LOG_DEBUG(TRACE, "Frame ignored, no channel data handler set");
-                    }
-                    //need solve
-#ifdef GSM0710_RELAX_WHEN_CHANNEL_IN_FLOW_CONTROL
-                    if (c->localModemState & proto::FC) {
-                        return GSM0710_ERROR_FLOW_CONTROL;
-                    }
-#endif // GSM0710_RELAX_WHEN_CHANNEL_IN_FLOW_CONTROL
-                } else {
-                    if (frame_.length > 1) {
-                        processControlMessage();
-                    }
-                }
-            }
+            Logger::getInstance()->addMessage("processChannelData UI/UIH PF\r\n");
+//             GSM0710_LOG_DEBUG(TRACE, "UI/UIH");
+//             if (!c || c->state != ChannelState::Opened) {
+//                 if (!c) {
+//                     GSM0710_LOG_DEBUG(WARN, "Received UI/UIH on an unknown channel %u, replying with DM", channel);
+//                 } else {
+//                     GSM0710_LOG_DEBUG(WARN, "Received UI/UIH for a non-open channel %u, replying with DM", channel);
+//                 }
+//                 commandSend(channel, proto::DM | proto::PF);
+//             } else {
+//                 if (channel > 0) {
+//                     if (c->handler) {
+//                         auto h = c->handler;
+//                         auto ctx = c->handlerCtx;
+//                         lk.unlock();
+//                         h(frame_.data, frame_.length, ctx);
+//                     } else {
+//                         GSM0710_LOG_DEBUG(TRACE, "Frame ignored, no channel data handler set");
+//                     }
+// #ifdef GSM0710_RELAX_WHEN_CHANNEL_IN_FLOW_CONTROL
+//                     if (c->localModemState & proto::FC) {
+//                         return GSM0710_ERROR_FLOW_CONTROL;
+//                     }
+// #endif // GSM0710_RELAX_WHEN_CHANNEL_IN_FLOW_CONTROL
+//                 } else {
+//                     if (frame_.length > 1) {
+//                         processControlMessage();
+//                     }
+//                 }
+//             }
             break;
         }
+
+        default: {
+            Logger::getInstance()->addMessage("processChannelData default\r\n");
+            break;
+        }
+
     }
     return 0;
 }
@@ -1103,8 +1139,7 @@ inline int Muxer<StreamT, MutexT>::controlFinished() {
             (useMscKeepAlive_ && ctrl_.command == (proto::MSC | proto::CR) && (ctrl_.data[2] >> 2) == 1)) {
         if (ctrl_.state != ControlCommand::State::Timeout) {
             keepAlivesMissed_ = 0;
-            // xEventGroupSetBits(events_, EVENT_PING);
-            events_.set(EVENT_PING);
+            xEventGroupSetBits(events_, EVENT_PING);
         } else {
             keepAlivesMissed_++;
             if (keepAliveMaxMissed_ && keepAlivesMissed_ >= keepAliveMaxMissed_) {
@@ -1129,8 +1164,7 @@ inline int Muxer<StreamT, MutexT>::processModemState(const uint8_t* data, size_t
     if (c && l >= 1) {
         GSM0710_LOG_DEBUG(INFO, "Updating channel %u remote modem state. Old = %02x, new = %02x", channel, c->remoteModemState, v24);
         c->remoteModemState = v24;
-        // xEventGroupSetBits(channelEvents_, EVENT_STATE_CHANGED << channel);
-        channelEvents_.set(EVENT_STATE_CHANGED << channel);
+        xEventGroupSetBits(channelEvents_, EVENT_STATE_CHANGED << channel);
     }
 
     controlReply(proto::MSC, data, length);
@@ -1166,10 +1200,12 @@ template<typename StreamT, typename MutexT>
 inline int Muxer<StreamT, MutexT>::waitChannelState(Channel* chan, ChannelState state) {
     GSM0710_LOG_DEBUG(TRACE, "Waiting for channel %u in state %s to transition to %s",
             chan->channel, chan->stateName(chan->state), chan->stateName(state));
+    Logger::getInstance()->addMessage("waitChannelState\r\n");
     while (isRunning() && chan->state != state && chan->state != ChannelState::Error) {
-        // xEventGroupWaitBits(channelEvents_, EVENT_STATE_CHANGED << chan->channel, pdTRUE, pdFALSE, 100 / portTICK_RATE_MS);
         channelEvents_.wait_any(EVENT_STATE_CHANGED << chan->channel, 100, true);
+        // xEventGroupWaitBits(channelEvents_, EVENT_STATE_CHANGED << chan->channel, pdTRUE, pdFALSE, 100 / portTICK_RATE_MS);
     }
+    Logger::getInstance()->addMessage("waitChannelState adter\r\n");
 
     return !(chan->state == state);
 }
@@ -1188,6 +1224,8 @@ bool Muxer<StreamT, MutexT>::waitStream(uint64_t millis) {
 template<typename StreamT, typename MutexT>
 inline int Muxer<StreamT, MutexT>::sendChannel(uint8_t channel, uint8_t control, bool cmd, const uint8_t* data, size_t len) {
     std::lock_guard<MutexT> lk(mutex_);
+
+    Logger::getInstance()->addMessage("sendChannel\r\n");
 
     uint8_t header[5];
     uint8_t footer[2];
@@ -1209,44 +1247,49 @@ inline int Muxer<StreamT, MutexT>::sendChannel(uint8_t channel, uint8_t control,
     footer[0] = fcs(header + 1, hlen - 1);
     footer[1] = proto::BASIC_FLAG;
 
-    auto t1 = portable::getMillis();
+    auto t1 = Common::getInstance()->getMillis();
 
     size_t sent = 0;
     while (sent < hlen) {
         sent += CHECK(stream_->write((const char*)header + sent, hlen - sent));
-        if ((portable::getMillis() - t1) > getControlResponseTimeout() * 2) {
-            GSM0710_LOG_DEBUG(ERROR, "Timeout writing into stream");
-            return GSM0710_ERROR_FLOW_CONTROL;
+        if ((Common::getInstance()->getMillis() - t1) > getControlResponseTimeout() * 2) {
+            Logger::getInstance()->addMessage("sendChannel ERROR\r\n");
+    //         GSM0710_LOG_DEBUG(ERROR, "Timeout writing into stream");
+    //         return GSM0710_ERROR_FLOW_CONTROL;
         }
-        // CHECK(stream_->waitEvent(StreamT::WRITABLE, std::max<int>(0, getControlResponseTimeout() * 2 - (portable::getMillis() - t1))));
         CHECK_TRUE(waitStream(getControlResponseTimeout() * 2), -1);
+    //     CHECK(stream_->waitEvent(StreamT::WRITABLE, std::max<int>(0, getControlResponseTimeout() * 2 - (portable::getMillis() - t1))));
     }
 
-    t1 = portable::getMillis();
+    t1 = Common::getInstance()->getMillis();
     if (len) {
         sent = 0;
         while (sent < len) {
             sent += CHECK(stream_->write((const char*)data + sent, len - sent));
-            if ((portable::getMillis() - t1) > getControlResponseTimeout() * 2) {
+            if ((Common::getInstance()->getMillis() - t1) > getControlResponseTimeout() * 2) {
                 GSM0710_LOG_DEBUG(ERROR, "Timeout writing into stream");
+                Logger::getInstance()->addMessage("sendChannel ERROR\r\n");
                 return GSM0710_ERROR_FLOW_CONTROL;
             }
-            // CHECK(stream_->waitEvent(StreamT::WRITABLE, std::max<int>(0, getControlResponseTimeout() * 2 - (portable::getMillis() - t1))));
             CHECK_TRUE(waitStream(getControlResponseTimeout() * 2), -1);
+            // CHECK(stream_->waitEvent(StreamT::WRITABLE, std::max<int>(0, getControlResponseTimeout() * 2 - (portable::getMillis() - t1))));
         }
     }
 
     sent = 0;
-    t1 = portable::getMillis();
+    t1 = Common::getInstance()->getMillis();
     while (sent < sizeof(footer)) {
         sent += CHECK(stream_->write((const char*)footer + sent, sizeof(footer) - sent));
-        if ((portable::getMillis() - t1) > getControlResponseTimeout() * 2) {
+        if ((Common::getInstance()->getMillis() - t1) > getControlResponseTimeout() * 2) {
             GSM0710_LOG_DEBUG(ERROR, "Timeout writing into stream");
+            Logger::getInstance()->addMessage("sendChannel ERROR\r\n");
             return GSM0710_ERROR_FLOW_CONTROL;
         }
-        // CHECK(stream_->waitEvent(StreamT::WRITABLE, std::max<int>(0, getControlResponseTimeout() * 2 - (portable::getMillis() - t1))));
         CHECK_TRUE(waitStream(getControlResponseTimeout() * 2), -1);
+        // CHECK(stream_->waitEvent(StreamT::WRITABLE, std::max<int>(0, getControlResponseTimeout() * 2 - (portable::getMillis() - t1))));
     }
+
+    Logger::getInstance()->addMessage("sendChannel after waitStream\r\n");
 
     return 0;
 }
@@ -1254,7 +1297,7 @@ inline int Muxer<StreamT, MutexT>::sendChannel(uint8_t channel, uint8_t control,
 template<typename StreamT, typename MutexT>
 inline int Muxer<StreamT, MutexT>::controlSend(proto::ControlChannelCommand cmd, const uint8_t* data, size_t size) {
     GSM0710_LOG_DEBUG(TRACE, "Sending control command %02x, length = %u", cmd, size);
-    std::unique_lock<MutexT> lk(mutex_);
+    MutexT lk(mutex_);
 
     ctrl_.state = ControlCommand::State::Pending;
     ctrl_.len = 2 + size;
@@ -1275,23 +1318,24 @@ inline int Muxer<StreamT, MutexT>::controlSend(proto::ControlChannelCommand cmd,
 template<typename StreamT, typename MutexT>
 inline int Muxer<StreamT, MutexT>::controlProcess() {
     int timeout = std::numeric_limits<int>::max();
-
     if (ctrl_.state == ControlCommand::State::Pending) {
-        if ((portable::getMillis() - ctrl_.timestamp) >= getControlResponseTimeout()) {
-            // Time to retry
-            if (ctrl_.retries++ < getMaxRetransmissions()) {
-                GSM0710_LOG_DEBUG(TRACE, "(%d/%d) Retrying control command: %02x, len = %u",
-                        ctrl_.retries, getMaxRetransmissions(), ctrl_.command, ctrl_.len);
-                CHECK(sendChannel(0, proto::UIH, true, ctrl_.data, ctrl_.len));
-                ctrl_.timestamp = portable::getMillis();
-                timeout = getControlResponseTimeout();
-            } else {
-                ctrl_.state = ControlCommand::State::Timeout;
-                controlFinished();
-            }
-        } else {
-            timeout = std::min<decltype(timeout)>(timeout, getControlResponseTimeout() - (portable::getMillis() - ctrl_.timestamp));
-        }
+        // addMessage("controlProcess pending", true);
+        Logger::getInstance()->addMessage("controlProcess pending\r\n");
+        // if ((portable::getMillis() - ctrl_.timestamp) >= getControlResponseTimeout()) { //need solve
+        //     // Time to retry
+        //     if (ctrl_.retries++ < getMaxRetransmissions()) {
+        //         GSM0710_LOG_DEBUG(TRACE, "(%d/%d) Retrying control command: %02x, len = %u",
+        //                 ctrl_.retries, getMaxRetransmissions(), ctrl_.command, ctrl_.len);
+        //         CHECK(sendChannel(0, proto::UIH, true, ctrl_.data, ctrl_.len));
+        //         ctrl_.timestamp = portable::getMillis();
+        //         timeout = getControlResponseTimeout();
+        //     } else {
+        //         ctrl_.state = ControlCommand::State::Timeout;
+        //         controlFinished();
+        //     }
+        // } else {
+        //     timeout = std::min<decltype(timeout)>(timeout, getControlResponseTimeout() - (portable::getMillis() - ctrl_.timestamp));
+        // }
     }
 
     return timeout;
@@ -1322,7 +1366,6 @@ inline int Muxer<StreamT, MutexT>::responseSend(uint8_t channel, uint8_t control
 template<typename StreamT, typename MutexT>
 inline int Muxer<StreamT, MutexT>::modemStatusSend(Channel* c) {
     GSM0710_LOG_DEBUG(TRACE, "Sending local modem status on channel %u", c->channel);
-    //need solve
 #if !defined(GSM0710_MODEM_STATUS_SEND_EMPTY_BREAK)
     uint8_t buf[2] = {};
     buf[0] = (c->channel << 2) | proto::EA | proto::CR;
@@ -1391,11 +1434,6 @@ template<typename StreamT, typename MutexT>
 inline int Muxer<StreamT, MutexT>::channelTransition(Channel* channel, ChannelState state) {
     if (channelHandler_) {
         int r = channelHandler_(channel->channel, channel->state, state, channelHandlerCtx_);
-        if (!initiator_ && channel->channel != 0 && r) {
-            GSM0710_LOG_DEBUG(TRACE, "Channel %u state change from %s to %s denied by channel handler",
-                    channel->channel, channel->stateName(channel->state), channel->stateName(state));
-            return r;
-        }
     }
 
     channel->transition(state);

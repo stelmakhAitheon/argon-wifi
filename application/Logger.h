@@ -6,15 +6,17 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdint.h>
+#include "Common.h"
 
 class Logger {
 private:
     EventQueue _queue;
+    int _count;
     rtos::Thread _queueThread;
     std::vector<std::string> _messages;
     static Logger *_instance;
     Logger();
-    void internalAddMessage(std::string *message);
+    void internalAddMessage(std::string message);
     void internalPrintMessages();
     static std::string internalFormat(const char *fmt, va_list args);
 public:

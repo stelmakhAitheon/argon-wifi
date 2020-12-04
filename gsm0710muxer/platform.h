@@ -23,13 +23,15 @@
 // #include <freertos/event_groups.h>
 #include "common.h"
 #include "util.h"
+#include "Common.h"
 
 namespace gsm0710 {
 namespace portable {
 
-// inline uint64_t getMillis() {
-//     return particle::util::millis();
-// }
+inline uint64_t getMillis() {
+    // return particle::util::millis();
+    return Common::getInstance()->getMillis();
+}
 
 const auto taskStackSize = 4096;
 // const auto taskPriority = tskIDLE_PRIORITY + 2;

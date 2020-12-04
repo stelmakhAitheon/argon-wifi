@@ -2,7 +2,7 @@
 #include "USBSerial.h"
 #include "ESP32Interface.h"
 #include "Logger.h"
-
+#include "Common.h"
 
 static USBSerial usb;
 FileHandle* mbed::mbed_override_console(int) {
@@ -24,14 +24,34 @@ void print_func() {
         // printf("ESP32FUNC = %s\r\n", ESP32::message.c_str());
         // printf("ESP32RECV = %s\r\n", ESP32::received.c_str());
         // ESP32::mutex.unlock();
-        Logger::getInstance()->printMessages();
+        // Logger::getInstance()->printMessages();
         // printf("--------------\r\n");
         // lock.unlock();
-        ThisThread::sleep_for(3000);
+        ThisThread::sleep_for(5000);
     }
 }
 
+
+void waitMillis(uint64_t millis) {
+    
+    // out.attach(test123, float(millis) / 1000);
+    volatile bool wait = true;
+    Timeout out;
+    Logger::getInstance()->addMessage("start waitMillis\r\n");
+    out.attach_us(callback((void (*)(volatile bool *))[](volatile bool *wait) {
+        *wait = false; 
+    }, &wait), millis * 1000);
+    while(wait);
+    // {
+    //     //serial->writable()
+    //     ThisThread::sleep_for(10);
+    // }
+    Logger::getInstance()->addMessage("EXECUTE IN %d\r\n", (int)Common::getInstance()->getMillis());
+}
+
 int main() {    
+    Common::getInstance(); // start timer
+    Logger::getInstance()->addMessage("START\r\n");
     DigitalOut led(P1_12);
     led = 1;
 
@@ -39,11 +59,12 @@ int main() {
         thread_print.start(print_func);
     });
 
-    queue.call_every(3000, [] {
-        // Logger::getInstance()->addMessage("HELLO\r\n");
+    queue.call_in(3000, [] {
+        // Logger::getInstance()->addMessage("start = %d\r\n", (int)Common::getInstance()->getMillis());
+        // waitMillis(2000);
     });
 
-    queue.call_in(2000, [] {  
+    queue.call([] {  
         // for(int i = 0; i < 5; i++) {
         //     Thread *thread = new Thread();
         //     thread->start((void (*)(int *))[] (int *threadNum) {
@@ -53,10 +74,26 @@ int main() {
                     
         //         }
         //     }, new int(i));
-        // }     
+        // }
+        // EventFlags flag;
+        // rtos::Thread thread;
+        // Logger::getInstance()->addMessage("WORKING = %d\r\n", (int)(thread.get_state() == rtos::Thread::State::Deleted));
+        // auto state = thread.get_state();
+        // thread.start([&flag]{
+        //     // while(true) {
+        //     flag.wait_any(0x1);
+        //     ThisThread::sleep_for(1000);
+        //     // }
+        // });
+        // ThisThread::sleep_for(200);
+        //(thread.get_state() == rtos::Thread::State::Running)
+        // Logger::getInstance()->addMessage("WORKING = %d\r\n", (int)(thread.get_state() == rtos::Thread::State::Deleted));
+        // flag.set(0x1);
+        // thread.join();
+        // Logger::getInstance()->addMessage("WORKING = %d\r\n", (int)(thread.get_state() == rtos::Thread::State::Deleted));
 
         ESP32Interface *esp32 = new ESP32Interface(P0_24, P0_16, P1_5, P1_4, false, P1_7, P1_6, 921600);
-        const char *mac = esp32->get_mac_address();
+        esp32->get_mac_address();
 
         //old cmux test
         // printf("mac =%s\r\n", mac);
@@ -76,5 +113,5 @@ int main() {
 
     });
 
-    mainThread.start(&queue, &EventQueue::dispatch_forever);
+    mainThread.start(callback(&queue, &EventQueue::dispatch_forever));
 }

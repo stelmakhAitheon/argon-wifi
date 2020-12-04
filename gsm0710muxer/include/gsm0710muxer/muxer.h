@@ -25,6 +25,8 @@
 #include "gsm0710muxer/muxer_def.h"
 #include "gsm0710muxer/platform.h"
 #include "Logger.h"
+#include "Common.h"
+#include "SerialUtil.h"
 
 #ifdef GSM0710_SHARED_STREAM_EVENT_GROUP
 #ifndef GSM0710_SHARED_STREAM_EVENT_BASE
@@ -175,7 +177,7 @@ private:
 
 private:
     void run();
-    void runThread();
+    void streamStateChanged();
 
     int stopMuxer();
     void forceClose();
@@ -214,6 +216,7 @@ private:
     int channelTransition(Channel* channel, ChannelState state);
 
     static const char* stateName(State state);
+    bool waitStream(uint64_t millis);
 private:
     MutexT mutex_;
     rtos::Thread thread_;
@@ -228,14 +231,11 @@ private:
     // void* channelEvents_ = nullptr;
     EventFlags events_;
     EventFlags channelEvents_;
+    EventFlags eventsStream_;
 
     enum EventSet {
         EVENT_STATE_CHANGED          = 0x01 << GSM0710_EVENT_BASE,
-#ifndef GSM0710_SHARED_STREAM_EVENT_GROUP
         EVENT_INPUT_DATA             = 0x02 << GSM0710_EVENT_BASE,
-#else
-        EVENT_INPUT_DATA             = StreamT::READABLE,
-#endif // GSM0710_SHARED_STREAM_EVENT_GROUP
         EVENT_STOP                   = 0x04 << GSM0710_EVENT_BASE,
         EVENT_WAKEUP                 = 0x08 << GSM0710_EVENT_BASE,
         EVENT_STOPPED                = 0x10 << GSM0710_EVENT_BASE,
