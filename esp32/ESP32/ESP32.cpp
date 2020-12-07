@@ -26,19 +26,11 @@ const auto ESP32_NCP_AT_CHANNEL = 1;
 const auto ESP32_NCP_STA_CHANNEL = 2;
 const auto ESP32_NCP_AP_CHANNEL = 3;
 
+const auto ESP32_NCP_MAX_MUXER_FRAME_SIZE = 1536;
 const auto ESP32_NCP_KEEPALIVE_PERIOD = 5000; // milliseconds
 const auto ESP32_NCP_KEEPALIVE_MAX_MISSED = 5;
 
-// FIXME: for now using a very large buffer
-const auto ESP32_NCP_AT_CHANNEL_RX_BUFFER_SIZE = 4096;
-
 const auto ESP32_NCP_DEFAULT_SERIAL_BAUDRATE = 921600;
-
-std::string ESP32::message = "";
-std::vector<std::string> ESP32::functions;
-int ESP32::funcCount = 0;
-Mutex ESP32::mutex;
-std::string ESP32::received = "";
 
 using namespace mbed;
 using namespace rtos;
@@ -71,11 +63,14 @@ ESP32 * ESP32::getESP32Inst(bool debug)
 ESP32::ESP32(PinName en, PinName io0, PinName tx, PinName rx, bool debug,
     PinName rts, PinName cts, int baudrate)
     : _p_wifi_en(NULL), _p_wifi_io0(NULL), _init_end_common(false), _init_end_wifi(false)
-    , _serial(tx, rx, ESP32_DEFAULT_BAUD_RATE), _parser(&_serial, "\r\n")
+    , _serial(tx, rx, ESP32_DEFAULT_BAUD_RATE)
     , _packets(0), _packets_end(&_packets)
     , _id_bits(0), _server_act(false)
     , _wifi_status(STATUS_DISCONNECTED)
     , _wifi_status_cb(NULL), _at_version(0)
+    , atStream_(&muxer_, ESP32_NCP_AT_CHANNEL)
+    , _parser(&atStream_, "\r\n")
+    , atParser_(&_serial, "\r\n")
 #if defined(TARGET_ESP32AT_BLE)
     , _ble_conn_cb(NULL), _ble_disconn_cb(NULL), _ble_write_cb(NULL), _ble_scan_cb(NULL)
     , _ble_role(INIT_SERVER_ROLE), _init_end_ble(false)
@@ -111,10 +106,8 @@ ESP32::ESP32(PinName en, PinName io0, PinName tx, PinName rx, bool debug,
     }
 
     _serial.set_baud(ESP32_DEFAULT_BAUD_RATE);
-    // _serial.set_blocking(true);
     ready_ = false;
     muxerNotStarted_ = false;
-    // decltype(muxerAtStream_) muxStrm(new(std::nothrow) decltype(muxerAtStream_)::element_type(&muxer_, ESP32_NCP_AT_CHANNEL));
     debugOn(debug);
 
     _parser.oob("+IPD", callback(this, &ESP32::_packet_handler));
@@ -129,16 +122,8 @@ ESP32::ESP32(PinName en, PinName io0, PinName tx, PinName rx, bool debug,
     _parser.oob("3,CLOSED", callback(this, &ESP32::_closed_handler_3));
     _parser.oob("4,CLOSED", callback(this, &ESP32::_closed_handler_4));
     _parser.oob("WIFI ", callback(this, &ESP32::_connection_status_handler));
-#if defined(TARGET_ESP32AT_BLE)
-    _parser.oob("+BLECONN:", callback(this, &ESP32::_ble_conn));
-    _parser.oob("+BLEDISCONN:", callback(this, &ESP32::_ble_disconn));
-    _parser.oob("+WRITE:", callback(this, &ESP32::_ble_write));
-    _parser.oob("+BLESCAN:", callback(this, &ESP32::_ble_scan));
-    _parser.oob("+BLEGATTCPRIMSRV:", callback(this, &ESP32::_ble_primsrv));
-    _parser.oob("+BLEGATTCCHAR:", callback(this, &ESP32::_ble_discovers_char));
-#endif /* TARGET_ESP32AT_BLE */
 
-    _serial.sigio(Callback<void()>(this, &ESP32::event));
+    // _serial.sigio(Callback<void()>(this, &ESP32::event));
 
     setTimeout();
 }
@@ -150,6 +135,7 @@ void ESP32::debugOn(bool debug)
 
 bool ESP32::get_version_info(char * ver_info, int buf_size)
 {
+    Logger::getInstance()->addMessage("ESP32 get_version_info\r\n");
     //addFunc("ESP32 get_version_info\r\n");
     bool ret;
     int idx = 0;
@@ -242,24 +228,14 @@ bool ESP32::_startup_wifi()
         return true;
     }
     waitReady();
-    bool success = true;
-    // bool success = _parser.send("AT+CWMODE=%d", _wifi_mode)
-    //             && _parser.recv("OK")
-    //             && _parser.send("AT+CIPMUX=1")
-    //             && _parser.recv("OK")
-    //             && _parser.send("AT+CWAUTOCONN=0")
-    //             && _parser.recv("OK")
-    //             && _parser.send("AT+CWQAP")
-    //             && _parser.recv("OK");
-    // if (success) {
-        _init_end_wifi = true;
-    // }
+    _init_end_wifi = true;
 
-    return success;
+    return true;
 }
 
 bool ESP32::restart()
 {
+    Logger::getInstance()->addMessage("ESP32 restart\r\n");
     //addFunc("ESP32 restart\r\n");
     bool success = true;;
     bool ret;
@@ -292,6 +268,7 @@ bool ESP32::restart()
 
 bool ESP32::set_mode(int mode)
 {
+    Logger::getInstance()->addMessage("ESP32 set_mode\r\n");
     //addFunc("ESP32 set_mode\r\n");
     //only 3 valid modes
     if (mode < 1 || mode > 3) {
@@ -308,6 +285,7 @@ bool ESP32::set_mode(int mode)
 
 bool ESP32::cre_server(int port)
 {
+    Logger::getInstance()->addMessage("ESP32 cre_server\r\n");
     //addFunc("ESP32 cre_server\r\n");
     if (_server_act) {
         return false;
@@ -326,6 +304,7 @@ bool ESP32::cre_server(int port)
 
 bool ESP32::del_server()
 {
+    Logger::getInstance()->addMessage("ESP32 del_server\r\n");
     //addFunc("ESP32 del_server\r\n");
     _smutex.lock();
     _startup_wifi();
@@ -341,6 +320,7 @@ bool ESP32::del_server()
 
 void ESP32::socket_handler(bool connect, int id)
 {
+    Logger::getInstance()->addMessage("ESP32 socket_handler\r\n");
     //addFunc("ESP32 socket_handler\r\n");
     _cbs[id].Notified = 0;
     if (connect) {
@@ -362,6 +342,7 @@ void ESP32::socket_handler(bool connect, int id)
 
 bool ESP32::accept(int * p_id)
 {
+    Logger::getInstance()->addMessage("ESP32 accept\r\n");
     //addFunc("ESP32 accept\r\n");
     bool ret = false;
 
@@ -395,6 +376,7 @@ bool ESP32::accept(int * p_id)
 
 bool ESP32::reset(void)
 {
+    Logger::getInstance()->addMessage("ESP32 reset\r\n");
     //addFunc("ESP32 reset\r\n");
     for (int i = 0; i < 2; i++) {
         if (_parser.send("AT+RST")
@@ -459,8 +441,9 @@ bool ESP32::dhcp(bool enabled, int mode)
 
     _smutex.lock();
     _startup_wifi();
-    bool done = _parser.send("AT+CWDHCP=%d,%d", enabled?1:0, mode)
-       && _parser.recv("OK");
+    // bool done = _parser.send("AT+CWDHCP=%d,%d", enabled?1:0, mode)
+    //    && _parser.recv("OK");
+    bool done = true;
     _smutex.unlock();
 
     return done;
@@ -476,9 +459,23 @@ bool ESP32::connect(const char *ap, const char *passPhrase)
     _smutex.lock();
     _startup_wifi();
 
+    
+    if (muxer_.openChannel(ESP32_NCP_STA_CHANNEL, atStream_.channel2DataCb, &atStream_)) {
+        Logger::getInstance()->addMessage("FAIL OPEN CHANNEL\r\n");
+    } else
+        Logger::getInstance()->addMessage("OPENNED CHANNEL 2\r\n");
+    muxer_.resumeChannel(ESP32_NCP_STA_CHANNEL);
+
+
+
     setTimeout(ESP32_CONNECT_TIMEOUT);
-    ret = _parser.send("AT+CWJAP=\"%s\",\"%s\"", ap, passPhrase)
-       && _parser.recv("OK");
+    while(true) {
+        ret = _parser.send("AT+CWJAP=\"%s\",\"%s\"", ap, passPhrase)
+            && _parser.recv("OK");
+        if(ret)
+            break;
+        ThisThread::sleep_for(1000);
+    }
     setTimeout();
     _smutex.unlock();
     return ret;
@@ -498,6 +495,7 @@ bool ESP32::config_soft_ap(const char *ap, const char *passPhrase, uint8_t chl, 
 
 bool ESP32::get_ssid(char *ap)
 {
+    Logger::getInstance()->addMessage("ESP32 get_ssid\r\n");
     //addFunc("ESP32 get_ssid\r\n");
     bool ret;
 
@@ -523,7 +521,9 @@ bool ESP32::disconnect(void)
 
 const char *ESP32::getIPAddress(void)
 {
+    Logger::getInstance()->addMessage("ESP32 getIPAddress\r\n");
     //addFunc("ESP32 getIPAddress\r\n");
+    return 0;
     bool ret;
 
     _smutex.lock();
@@ -540,6 +540,7 @@ const char *ESP32::getIPAddress(void)
 
 const char *ESP32::getIPAddress_ap(void)
 {
+    Logger::getInstance()->addMessage("ESP32 getIPAddress_ap\r\n");
     //addFunc("ESP32 getIPAddress_ap\r\n");
     bool ret;
 
@@ -557,18 +558,15 @@ const char *ESP32::getIPAddress_ap(void)
 
 const char *ESP32::getMACAddress(void)
 {
-    // bool ret;
-
     _smutex.lock();
     _startup_wifi();
-    // ret = _parser.send("AT+GETMAC=0")
-    //    && _parser.recv("+GETMAC: \"%32[^\"]\"", _mac_buffer)
-    //    && _parser.recv("OK");
+ 
+    bool ret = _parser.send("AT+GETMAC=0")
+       && _parser.recv("+GETMAC: \"%32[^\"]\"", _mac_buffer)
+       && _parser.recv("OK");
   
     _smutex.unlock();
 
-    // testCMUX(nullptr, 0);
-    // return "trololo";
     return _mac_buffer;
 }
 
@@ -591,6 +589,7 @@ const char *ESP32::getMACAddress_ap(void)
 
 const char *ESP32::getGateway()
 {
+    Logger::getInstance()->addMessage("ESP32 getGateway\r\n");
     //addFunc("ESP32 getGateway\r\n");
     bool ret;
 
@@ -644,6 +643,7 @@ const char *ESP32::getNetmask()
 
 const char *ESP32::getNetmask_ap()
 {
+    Logger::getInstance()->addMessage("ESP32 getNetmask_ap\r\n");
     //addFunc("ESP32 getNetmask_ap\r\n");
     bool ret;
 
@@ -662,6 +662,7 @@ const char *ESP32::getNetmask_ap()
 
 int8_t ESP32::getRSSI()
 {
+    Logger::getInstance()->addMessage("ESP32 getRSSI\r\n");
     //addFunc("ESP32 getRSSI\r\n");
     bool ret;
     int8_t rssi[2]; /* It needs 1 byte extra. */
@@ -731,83 +732,51 @@ int ESP32::scan(WiFiAccessPoint *res, unsigned limit)
 
 bool ESP32::isConnected(void)
 {
+    Logger::getInstance()->addMessage("ESP32 isConnected\r\n");
     //addFunc("ESP32 isConnected\r\n");
     return getIPAddress() != 0;
-}
-
-int ESP32::initParser(Stream* stream) {
-    // Initialize AT parser
-    // auto parserConf = AtParserConfig()
-    //         .stream(stream)
-    //         .commandTerminator(AtCommandTerminator::CRLF);
-    // parser_.destroy();
-    // CHECK(parser_.init(std::move(parserConf)));
-    // // Register URC handlers
-    // CHECK(parser_.addUrcHandler("WIFI CONNECTED", nullptr, nullptr)); // Ignore
-    // CHECK(parser_.addUrcHandler("WIFI DISCONNECT", [](AtResponseReader* reader, const char* prefix, void* data) {
-    //     const auto self = (Esp32NcpClient*)data;
-    //     self->connectionState(NcpConnectionState::DISCONNECTED);
-    //     return 0;
-    // }, this));
-    return 0;
 }
 
 int ESP32::waitReady() {
     if (ready_) {
         return 0;
     }
-    // muxer_.addMessage = //addReceive;
-    muxer_.stop();
-    // //addReceive(muxer_.message);
-    // CHECK(initParser(serial_.get()));
-    // espReset();
-    // skipAll(serial_.get(), 1000);
 
-    CHECK_TRUE(_parser.send("AT"), true);
-    CHECK_TRUE(_parser.recv("OK"), true);
+    muxer_.stop();
+
+    CHECK_TRUE(atParser_.send("AT"), -1);
+    CHECK_TRUE(atParser_.recv("OK"), -1);
     ready_ = true;
-    // //addReceive("PARSER READY FOR AT COMMANDS");
+
     Logger::getInstance()->addMessage("PARSER READY FOR AT COMMANDS\r\n");
     
-
     if (ready_) {
-
         SerialUtil::skipAll(&_serial, 1000);
-        Logger::getInstance()->addMessage("AFTER SKIP\r\n");
-    //     skipAll(serial_.get(), 1000);
-    //     parser_.reset();
-    //     parserError_ = 0;
-    //     LOG(TRACE, "NCP ready to accept AT commands");
-
-        // auto r = 
         initReady();
-    //     if (r != SYSTEM_ERROR_NONE) {
-    //         LOG(ERROR, "Failed to perform early initialization");
-    //         ready_ = false;
-    //     }
-    // } else {
-    //     LOG(ERROR, "No response from NCP");
     }
 
     return 0;
 }
 
 int ESP32::initReady() {
-    // Send AT+CMUX and initialize multiplexer
-    CHECK_TRUE(_parser.send("AT+CMUX=0"), true);
-    CHECK_TRUE(_parser.recv("OK"), true);
+    CHECK_TRUE(atParser_.send("AT+CMUX=0"), true);
+    CHECK_TRUE(atParser_.recv("OK"), true);
 
-    // CHECK(initMuxer());
     initMuxer();
     muxerNotStarted_ = false;
 
     // //addReceive("initReady OK");
+    int n = 0;
+    while(true) {
+        bool res = _parser.send("AT+CWDHCP=0,3");
+        res = _parser.recv("OK");
+        if(res)
+            break;
+        n++;
+        ThisThread::sleep_for(1000);
+    }
     
-    // r = CHECK_PARSER(parser_.execCommand("AT+CWDHCP=0,3"));
-    // CHECK_TRUE(r == AtResponse::OK, SYSTEM_ERROR_AT_NOT_OK);
-
-    // // Now we are ready
-    // ncpState(NcpState::ON);
+    Logger::getInstance()->addMessage("parser CWDHCP recv on %d times \r\n", n);
 
     return 0;
 }
@@ -825,51 +794,39 @@ int ESP32::initMuxer() {
     // Set channel state handler
     // muxer_.setChannelStateHandler(muxChannelStateCb, this);
 
-    // Start muxer (blocking call)
-    // //addReceive("initMuxer");
     Logger::getInstance()->addMessage("initMuxer\r\n");
-
-    // CHECK_TRUE(muxer_.start(true) == 0, SYSTEM_ERROR_UNKNOWN);
     muxer_.start(true);
-    // //addReceive(muxer_.message);
     Logger::getInstance()->addMessage("YEAH initMuxer\r\n");
-    // //addReceive("YEAH initMuxer");
 
-    // // Open AT channel and connect it to AT channel stream
-    // if (muxer_.openChannel(ESP32_NCP_AT_CHANNEL, muxerAtStream_->channelDataCb, muxerAtStream_.get())) {
-    //     // Failed to open AT channel
-    //     muxer_.stop();
-    //     return SYSTEM_ERROR_UNKNOWN;
-    // }
-    // // Just in case resume AT channel
-    // muxer_.resumeChannel(ESP32_NCP_AT_CHANNEL);
+    // Open AT channel and connect it to AT channel stream
+    if (muxer_.openChannel(ESP32_NCP_AT_CHANNEL, atStream_.channelDataCb, &atStream_)) {
+        // Failed to open AT channel
+        muxer_.stop();
+        return -1;
+    }
+    // Just in case resume AT channel
+    muxer_.resumeChannel(ESP32_NCP_AT_CHANNEL);
+    
+    int n = 0;
+    while(true) { 
+        bool res = _parser.send("AT")
+            && _parser.recv("OK");
+        if(res)
+            break;
+        n++;
+        ThisThread::sleep_for(1000);
+    }
+    Logger::getInstance()->addMessage("INIT ON %d times\r\n", n);
 
-    // // Reinitialize parser with a muxer-based stream
-    // CHECK(initParser(muxerAtStream_.get()));
-
-    // const unsigned timeout = 5000;
-    // const auto t1 = HAL_Timer_Get_Milli_Seconds();
-    // for (;;) {
-    //     const int r = parser_.execCommand(1000, "AT");
-    //     if (r == AtResponse::OK) {
-    //         // Success, remote end answered to an AT command
-    //         LOG_DEBUG(TRACE, "Muxer AT channel live");
-    //         return 0;
-    //     }
-    //     const auto t2 = HAL_Timer_Get_Milli_Seconds();
-    //     if (t2 - t1 >= timeout) {
-    //         break;
-    //     }
-    //     if (r != SYSTEM_ERROR_TIMEOUT) {
-    //         HAL_Delay_Milliseconds(1000);
-    //     }
-    // }
-
-    return SYSTEM_ERROR_UNKNOWN;
+    return 0;
 }
 
 bool ESP32::open(const char *type, int id, const char* addr, int port, int opt)
 {
+    Logger::getInstance()->addMessage("OPEN socket = %d\r\n", id);
+
+
+    return true;
     bool ret;
 
     if (id >= SOCKET_COUNT) {
@@ -927,6 +884,11 @@ bool ESP32::open(const char *type, int id, const char* addr, int port, int opt)
 
 bool ESP32::send(int id, const void *data, uint32_t amount)
 {
+    Logger::getInstance()->addMessage("ESP32 send %d\r\n", id);
+
+    muxer_.writeChannel(ESP32_NCP_STA_CHANNEL, (const uint8_t*)data, amount);
+
+    return true;
     //addFunc("ESP32 send\r\n");
     //addFunc("count = " + std::to_string(amount) + "\r\n");
 
@@ -1051,6 +1013,7 @@ void ESP32::_packet_handler()
 
 int32_t ESP32::recv(int id, void *data, uint32_t amount, uint32_t timeout)
 {
+    Logger::getInstance()->addMessage("ESP32 recv = %d\r\n", (int)amount);
     //addFunc("ESP32 recv\r\n");
     //addReceive("recv = " + std::to_string(amount) + " bytes");
     return 0;
@@ -1264,7 +1227,7 @@ void ESP32::_closed_handler_4()  { socket_handler(false, 4); }
 
 void ESP32::_connection_status_handler()
 {
-    //addFunc("ESP32 _connection_status_handler\r\n");
+    Logger::getInstance()->addMessage("ESP32 _connection_status_handler\r\n");
     char status[13];
     if (_parser.recv("%12[^\"]\n", status)) {
         if (strcmp(status, "CONNECTED\n") == 0) {
@@ -1285,6 +1248,7 @@ void ESP32::_connection_status_handler()
 
 int ESP32::get_free_id()
 {
+    Logger::getInstance()->addMessage("ESP32 get_free_id\r\n");
     //addFunc("ESP32 get_free_id\r\n");
     // Look for an unused socket
     int id = -1;
@@ -1297,7 +1261,7 @@ int ESP32::get_free_id()
         }
     }
 
-    return 1;
+    return id;
 }
 
 void ESP32::event() {
@@ -1318,6 +1282,7 @@ void ESP32::event() {
 
 bool ESP32::set_network(const char *ip_address, const char *netmask, const char *gateway)
 {
+    Logger::getInstance()->addMessage("ESP32 set_network\r\n");
     //addFunc("ESP32 set_network\r\n");
     bool ret;
 

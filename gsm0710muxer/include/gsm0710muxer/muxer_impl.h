@@ -29,7 +29,8 @@
 #ifdef GSM0710_ENABLE_DEBUG_LOGGING
 #define GSM0710_LOG_DEBUG(_level, _fmt, ...) LOG_DEBUG(_level, _fmt, ##__VA_ARGS__)
 #else
-#define GSM0710_LOG_DEBUG(_level, _fmt, ...) LOG(INFO, _fmt, ##__VA_ARGS__)
+// #define GSM0710_LOG_DEBUG(_level, _fmt, ...) LOG(INFO, _fmt, ##__VA_ARGS__)
+#define GSM0710_LOG_DEBUG(_level, _fmt, ...) 
 #endif // GSM0710_ENABLE_DEBUG_LOGGING
 
 namespace gsm0710 {
@@ -73,7 +74,8 @@ inline Muxer<StreamT, MutexT>::~Muxer() {
 
 template<typename StreamT, typename MutexT>
 void Muxer<StreamT, MutexT>::streamStateChanged() {
-    eventsStream_.set(EVENT_INPUT_DATA);
+    // eventsStream_.set(EVENT_INPUT_DATA);
+    events_.set(EVENT_INPUT_DATA);
 }
 
 template<typename StreamT, typename MutexT>
@@ -144,7 +146,7 @@ inline int Muxer<StreamT, MutexT>::start(bool initiator, bool openZeroChannel) {
 //         }
 
         // xEventGroupClearBits(events_, EVENT_MAX - 1);
-        eventsStream_.clear();
+        // eventsStream_.clear();
         channelEvents_.clear();
         events_.clear();
         stream_->sigio(callback(this, &Muxer::streamStateChanged));
@@ -401,6 +403,9 @@ inline int Muxer<StreamT, MutexT>::suspendChannel(uint8_t channel) {
         std::lock_guard<MutexT> lk(mutex_);
 
         auto newState = c->localModemState | proto::FC;
+        //solve
+        newState &= ~(proto::RTR);
+        //solve
 #ifdef GSM0710_FLOW_CONTROL_RTR
         newState &= ~(proto::RTR);
         //need solve
@@ -412,7 +417,7 @@ inline int Muxer<StreamT, MutexT>::suspendChannel(uint8_t channel) {
     }
     if (update) {
         // xEventGroupSetBits(events_, EVENT_WAKEUP);
-        events_set(EVENT_WAKEUP);
+        events_.set(EVENT_WAKEUP);
     }
 
     return 0;
@@ -513,8 +518,8 @@ void Muxer<StreamT, MutexT>::run() {
 //             break;
 //         }
 // #endif // GSM0710_SHARED_STREAM_EVENT_GROUP
-        auto ev = eventsStream_.wait_any(EVENT_INPUT_DATA | EVENT_STOP | EVENT_WAKEUP, nextTimeout, true);
-        
+        // auto ev = eventsStream_.wait_any(EVENT_INPUT_DATA | EVENT_STOP | EVENT_WAKEUP, nextTimeout, true);
+        auto ev = events_.wait_any(EVENT_INPUT_DATA | EVENT_STOP | EVENT_WAKEUP, nextTimeout, true);
         if(ev & osFlagsError) {
             ev = 0;
         }
@@ -969,11 +974,11 @@ inline int Muxer<StreamT, MutexT>::processChannelData() {
                         GSM0710_LOG_DEBUG(TRACE, "Frame ignored, no channel data handler set");
                     }
                     //need solve
-#ifdef GSM0710_RELAX_WHEN_CHANNEL_IN_FLOW_CONTROL
+// #ifdef GSM0710_RELAX_WHEN_CHANNEL_IN_FLOW_CONTROL
                     if (c->localModemState & proto::FC) {
                         return GSM0710_ERROR_FLOW_CONTROL;
                     }
-#endif // GSM0710_RELAX_WHEN_CHANNEL_IN_FLOW_CONTROL
+// #endif // GSM0710_RELAX_WHEN_CHANNEL_IN_FLOW_CONTROL
                 } else {
                     if (frame_.length > 1) {
                         processControlMessage();
@@ -1322,17 +1327,18 @@ inline int Muxer<StreamT, MutexT>::responseSend(uint8_t channel, uint8_t control
 template<typename StreamT, typename MutexT>
 inline int Muxer<StreamT, MutexT>::modemStatusSend(Channel* c) {
     GSM0710_LOG_DEBUG(TRACE, "Sending local modem status on channel %u", c->channel);
+    // LOG(INFO, "Sending local modem status on channel %u", c->channel);
     //need solve
-#if !defined(GSM0710_MODEM_STATUS_SEND_EMPTY_BREAK)
+// #if !defined(GSM0710_MODEM_STATUS_SEND_EMPTY_BREAK)
     uint8_t buf[2] = {};
     buf[0] = (c->channel << 2) | proto::EA | proto::CR;
     buf[1] = (c->localModemState << 1) | proto::EA;
-#else
-    uint8_t buf[3] = {};
-    buf[0] = (c->channel << 2) | proto::EA | proto::CR;
-    buf[1] = (c->localModemState << 1);
-    buf[2] = proto::EA;
-#endif // !defined(GSM0710_MODEM_STATUS_SEND_EMPTY_BREAK)
+// #else
+    // uint8_t buf[3] = {};
+    // buf[0] = (c->channel << 2) | proto::EA | proto::CR;
+    // buf[1] = (c->localModemState << 1);
+    // buf[2] = proto::EA;
+// #endif // !defined(GSM0710_MODEM_STATUS_SEND_EMPTY_BREAK)
     return controlSend(proto::MSC, buf, sizeof(buf));
 }
 

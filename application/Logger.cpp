@@ -56,13 +56,10 @@ void Logger::internalPrintMessages() {
 }
 
 void Logger::addMessage(const char *message, ...) {
-    if(_count >= 100)
-        return;
-    _count++;
     va_list args;
     va_start(args, message);
     _queue.call(this, &Logger::internalAddMessage, 
-        format("[THREADID=%p]%s", ThisThread::get_id(), internalFormat(message, args).c_str()));
+        format("[THREADID=%p] %s", ThisThread::get_id(), internalFormat(message, args).c_str()));
 }
 
 void Logger::printMessages() {

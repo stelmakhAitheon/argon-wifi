@@ -93,19 +93,18 @@ int main() {
         // Logger::getInstance()->addMessage("WORKING = %d\r\n", (int)(thread.get_state() == rtos::Thread::State::Deleted));
 
         ESP32Interface *esp32 = new ESP32Interface(P0_24, P0_16, P1_5, P1_4, false, P1_7, P1_6, 921600);
-        esp32->get_mac_address();
+        Logger::getInstance()->addMessage("MAC = %s\r\n", esp32->get_mac_address());
 
-        //old cmux test
-        // printf("mac =%s\r\n", mac);
-        // esp32.set_credentials("Aitheon", "Ukraine123", NSAPI_SECURITY_WPA2);
-        // esp32.connect();
+        esp32->set_credentials("Aitheon", "Ukraine123", NSAPI_SECURITY_WPA2);
+        int connected = esp32->connect();
+        Logger::getInstance()->addMessage("CONNECTED = %d\r\n", connected);
 
-        // TCPSocket socket;
-        // nsapi_error_t error = socket.open(&esp32);
+        TCPSocket socket;
+        nsapi_error_t error = socket.open(esp32);
 
-        // SocketAddress a;
-        // char buff[100];
-        // esp32.gethostbyname("google.com", &a);
+        SocketAddress a;
+        char buff[100];
+        esp32->gethostbyname("google.com", &a);
 
         // snprintf(buff, sizeof(buff), "IP address is: %s\n", a.get_ip_address() ? a.get_ip_address() : "No IP");
         // message = buff;
