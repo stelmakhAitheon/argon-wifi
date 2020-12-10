@@ -1,36 +1,7 @@
 {
-    "config": {
-        "network-interface": {
-            "help": "Options are ETHERNET, WIFI_ESP8266, WIFI_BP3595, WIFI_ESP32, NO_CONNECT",
-            "value": "WIFI_ESP32"
-        },
-        "wifi-ssid": {
-            "help": "WiFi SSID",
-            "value": "\"TVTEST\""
-        },
-        "wifi-password": {
-            "help": "WIFI Password",
-            "value": "\"12345678\""
-        },
-        "wifi-security": {
-            "help": "Options are NSAPI_SECURITY_WEP, NSAPI_SECURITY_WPA, NSAPI_SECURITY_WPA2, NSAPI_SECURITY_WPA_WPA2",
-            "value": "NSAPI_SECURITY_WPA_WPA2"
-        }
-    },
     "target_overrides": {
         "*": {
-
-            "nsapi.default-stack": "LWIP",
-
-            "target.components_add": ["WIFI_ESP32"],
-            "network-interface": "WIFI_ESP32",
-            "target.features_add": ["LWIP", "BLE"],
-
-            "lwip.ipv6-enabled": false,
-            "lwip.ethernet-enabled": true,
-            "lwip.ppp-enabled": false,
-            "lwip.tcp-enabled": true,
-            "mbed-trace.enable": 1
+            "target.features_add": ["BLE"]
         }
     }
 }

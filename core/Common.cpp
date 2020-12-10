@@ -19,5 +19,7 @@ Common::Common() {
 }
 
 uint64_t Common::getMillis() {
+    // need change to rtc because of max value of mbed::timer::read_ms
+    // app working only 66minutes!!! FAIL
     return _timer.read_ms();
 }
