@@ -17,9 +17,6 @@
 
 #pragma once
 
-// #include "logging.h"
-
-// #include <esp_err.h>
 #include "Logger.h"
 #include <string>
 

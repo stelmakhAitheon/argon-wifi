@@ -135,7 +135,6 @@ int ParticleEsp32::muxChannelStateCb(uint8_t channel, MuxerType::ChannelState ol
 }
 
 int ParticleEsp32::channel2Cb(const uint8_t* data, size_t size, void* ctx) {
-    // Logger::getInstance()->addMessage("get channel2Callback = %u \r\n", size);
     auto self = (ParticleEsp32*)ctx;
     if(self->_receiveDataCb)
         self->_receiveDataCb(data, size);

@@ -23,7 +23,7 @@
 #include <memory>
 #include <mbed.h>
 #include "gsm0710muxer/muxer_def.h"
-#include "gsm0710muxer/platform.h"
+#include "muxer_result.h"
 #include "Logger.h"
 #include "Common.h"
 #include "SerialUtil.h"
@@ -220,15 +220,6 @@ private:
 private:
     MutexT mutex_;
     rtos::Thread thread_;
-    
-    // void addMessage(std::string m) {
-    //     mutex_.lock();
-    //     message = message + m + "\r\n";
-    //     mutex_.unlock();
-    // }
-    
-    // void* events_ = nullptr;
-    // void* channelEvents_ = nullptr;
     EventFlags events_;
     EventFlags channelEvents_;
     EventFlags eventsStream_;

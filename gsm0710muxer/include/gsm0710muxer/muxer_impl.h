@@ -21,7 +21,6 @@
 #include <type_traits>
 #include <cstring>
 #include "gsm0710muxer/muxer_def.h"
-#include "gsm0710muxer/platform.h"
 
 #undef LOG_COMPILE_TIME_LEVEL
 #define LOG_COMPILE_TIME_LEVEL LOG_LEVEL_ALL

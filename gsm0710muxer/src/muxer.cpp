@@ -55,4 +55,12 @@ const uint8_t crcTable[256] = {
 };
 
 } // detail
+
+namespace portable {
+
+uint64_t getMillis() {
+    return Common::getInstance()->getMillis();
+}
+
+} // portable
 } // gsm0710

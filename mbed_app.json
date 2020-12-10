@@ -30,16 +30,7 @@
             "lwip.ethernet-enabled": true,
             "lwip.ppp-enabled": false,
             "lwip.tcp-enabled": true,
-            "mbed-trace.enable": 1,
-
-            "esp32.wifi-en" : "P0_24",
-            "esp32.wifi-io0": "P0_16",
-            "esp32.wifi-tx" : "P1_5",
-            "esp32.wifi-rx" : "P1_4",
-            "esp32.wifi-rts": "P1_7",
-            "esp32.wifi-cts": "P1_6",
-            "esp32.wifi-baudrate": 921600,    
-            "esp32.provide-default": true
+            "mbed-trace.enable": 1
         }
     }
 }
