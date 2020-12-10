@@ -1,6 +1,7 @@
 #pragma once
 
 #include <mbed.h>
+#include "USBSerial.h"
 
 class Common {
 private:

@@ -14,5 +14,4 @@ void SerialUtil::skipAll(FileHandle *fh, uint64_t millis) {
             bytes++;
         }
     }
-    Logger::getInstance()->addMessage("READ %d bytes\r\n", bytes);
 }

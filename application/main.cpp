@@ -1,15 +1,9 @@
 #include <mbed.h>
-#include "USBSerial.h"
 #include "Esp32Emac.h"
 #include "EthernetInterface.h"
 #include "Logger.h"
 #include "Common.h"
 #include "ParticleEsp32.h"
-
-FileHandle* mbed::mbed_override_console(int) {
-    static USBSerial usb;
-    return &usb;
-}    
 
 rtos::Thread mainThread;
 EventQueue queue;
