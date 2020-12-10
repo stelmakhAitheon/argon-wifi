@@ -466,6 +466,12 @@ bool ESP32::connect(const char *ap, const char *passPhrase)
         Logger::getInstance()->addMessage("OPENNED CHANNEL 2\r\n");
     muxer_.resumeChannel(ESP32_NCP_STA_CHANNEL);
 
+    if (muxer_.openChannel(ESP32_NCP_AP_CHANNEL, atStream_.channel3DataCb, &atStream_)) {
+        Logger::getInstance()->addMessage("FAIL OPEN CHANNEL 3\r\n");
+    } else
+        Logger::getInstance()->addMessage("OPENNED CHANNEL 3\r\n");
+    muxer_.resumeChannel(ESP32_NCP_AP_CHANNEL);
+
 
 
     setTimeout(ESP32_CONNECT_TIMEOUT);
@@ -522,8 +528,6 @@ bool ESP32::disconnect(void)
 const char *ESP32::getIPAddress(void)
 {
     Logger::getInstance()->addMessage("ESP32 getIPAddress\r\n");
-    //addFunc("ESP32 getIPAddress\r\n");
-    return 0;
     bool ret;
 
     _smutex.lock();
@@ -885,10 +889,24 @@ bool ESP32::open(const char *type, int id, const char* addr, int port, int opt)
 bool ESP32::send(int id, const void *data, uint32_t amount)
 {
     Logger::getInstance()->addMessage("ESP32 send %d\r\n", id);
+/*
+ESP32_NCP_AP_CHANNEL  
+ESP32_NCP_STA_CHANNEL
+*/
+    
+    // uint8_t *rData = (uint8_t *)data;
+    // std::string dataStr = "";
+    // for(int i = 0; i < amount; i++) {
+    //     char tmp[50] = {0};
+    //     snprintf(tmp, 50, "%02x ", rData[i]);
+    //     dataStr = dataStr + tmp;
+    //     if(i % 20 == 0)
+    //         dataStr = dataStr + "\r\n";
+    // }
+    // Logger::getInstance()->addMessage("data = \r\n%s\r\n", dataStr.c_str());
+ muxer_.writeChannel(ESP32_NCP_STA_CHANNEL, (const uint8_t*)data, amount);
 
-    muxer_.writeChannel(ESP32_NCP_STA_CHANNEL, (const uint8_t*)data, amount);
-
-    return true;
+    return false;
     //addFunc("ESP32 send\r\n");
     //addFunc("count = " + std::to_string(amount) + "\r\n");
 

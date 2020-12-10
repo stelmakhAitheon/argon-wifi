@@ -191,9 +191,20 @@ int ESP32Stack::socket_send(void *handle, const void *data, unsigned size)
 {
     struct esp32_socket *socket = (struct esp32_socket *)handle;
 
+    //printf("int ESP32Stack::socket_send(void *handle, const void *data, unsigned size)");
     if (!socket) {
         return NSAPI_ERROR_NO_SOCKET;
     }
+
+    _lock.lock();
+    printf("int ESP32Stack::socket_send(void *handle, const void *data, unsigned size) 1");
+    printf("esp32 send ____ %d _____ %d, and data = \n", socket->id, size);
+
+    int j;
+    for(j = 0; j < size; ++j)
+        printf("%02x\n", ((uint8_t*) data)[j]);
+
+    _lock.unlock();
 
     if (!_esp->send(socket->id, data, size)) {
         return NSAPI_ERROR_DEVICE_ERROR;

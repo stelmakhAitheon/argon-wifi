@@ -298,6 +298,7 @@ void ESP32Interface::set_connection_status(nsapi_connection_status_t connection_
 
 void ESP32Interface::wifi_status_cb(int8_t wifi_status)
 {
+    printf("wifi status %d_\n", wifi_status);
     switch (wifi_status) {
         case ESP32::STATUS_DISCONNECTED:
             set_connection_status(NSAPI_STATUS_DISCONNECTED);

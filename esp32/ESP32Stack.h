@@ -174,6 +174,7 @@ protected:
     ESP32 *_esp;
     uint16_t _local_ports[ESP32::SOCKET_COUNT];
     int _is_ap;
+    rtos::Mutex _lock;
 };
 
 #endif

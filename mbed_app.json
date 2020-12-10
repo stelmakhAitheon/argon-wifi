@@ -19,9 +19,19 @@
     },
     "target_overrides": {
         "*": {
+
+            "nsapi.default-stack": "LWIP",
+
             "target.components_add": ["WIFI_ESP32"],
             "network-interface": "WIFI_ESP32",
-            "target.features_add": ["BLE"],
+            "target.features_add": ["LWIP", "BLE"],
+
+            "lwip.ipv6-enabled": false,
+            "lwip.ethernet-enabled": true,
+            "lwip.ppp-enabled": false,
+            "lwip.tcp-enabled": true,
+            "mbed-trace.enable": 1,
+
             "esp32.wifi-en" : "P0_24",
             "esp32.wifi-io0": "P0_16",
             "esp32.wifi-tx" : "P1_5",

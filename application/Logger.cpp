@@ -46,9 +46,11 @@ Logger::Logger() {
 
 void Logger::internalAddMessage(std::string message) {
     _messages.push_back(message);
+    printf(message.c_str());
 }
 
 void Logger::internalPrintMessages() {
+    return;
     for(auto it = _messages.begin(); it != _messages.end(); it++) {
         printf(it->c_str());
     }
