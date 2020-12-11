@@ -222,7 +222,7 @@ private:
     rtos::Thread thread_;
     EventFlags events_;
     EventFlags channelEvents_;
-    EventFlags eventsStream_;
+    // EventFlags eventsStream_;
 
     enum EventSet {
         EVENT_STATE_CHANGED          = 0x01 << GSM0710_EVENT_BASE,

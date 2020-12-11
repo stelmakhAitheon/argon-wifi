@@ -31,6 +31,11 @@ void ParticleEsp32::reset() {
     SerialUtil::skipAll(_serial, 1000);
 }
 
+void ParticleEsp32::off() {
+    _wifiEn->write(0);
+    Logger::getInstance()->addMessage("esp32 off \r\n");
+}
+
 bool ParticleEsp32::checkAt() {
     return _atParser->send("AT") && _atParser->recv("OK");
 }

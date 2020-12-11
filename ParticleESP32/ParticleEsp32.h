@@ -63,4 +63,5 @@ public:
     bool connect(const char *ap, const char *passPhrase);
     int sendData(const uint8_t* data, size_t size);
     void setReceiveDataCb(mbed::Callback<void(const uint8_t* data, size_t size)> receiveDataCb);
+    void off();
 };
