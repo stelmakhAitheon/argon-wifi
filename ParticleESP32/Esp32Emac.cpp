@@ -13,7 +13,7 @@ Esp32Emac *Esp32Emac::getInstance() {
 }
 
 uint32_t Esp32Emac::get_mtu_size() const {
-    return 1500U;
+    return 1536U;
 }
 
 uint32_t Esp32Emac::get_align_preference() const {
@@ -54,6 +54,7 @@ bool Esp32Emac::power_up() {
 }
 
 void Esp32Emac::power_down() {
+    Logger::getInstance()->addMessage("FAIL power_down \r\n");
 }
 
 
@@ -91,6 +92,7 @@ bool Esp32Emac::link_out(emac_mem_buf_t *buf) {
 
     if(res == 0)
         return true;
+    Logger::getInstance()->addMessage("FAIL SEND ESP32EMAC \r\n");
     return false;
 }
 

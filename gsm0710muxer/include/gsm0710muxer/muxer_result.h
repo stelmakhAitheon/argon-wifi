@@ -23,7 +23,8 @@
 #define LOG_TAG "ncp" // FIXME
 
 #define LOG(_level, _fmt, ...) \
-        Logger::getInstance()->addMessage((std::string(_fmt)+"\r\n").c_str(), ##__VA_ARGS__); \
+        Logger::getInstance()->addMessage((std::string(_fmt)+"\r\n").c_str(), ##__VA_ARGS__); \ 
+        //printf((std::string(_fmt)+"\r\n").c_str(), ##__VA_ARGS__); \
         //ESP_LOG_LEVEL_LOCAL((esp_log_level_t)::particle::LOG_LEVEL_##_level, LOG_TAG, _fmt, ##__VA_ARGS__)
 
 #define LOG_DUMP(_level, _data, _size) \

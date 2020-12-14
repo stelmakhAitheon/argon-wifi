@@ -1,3 +1,8 @@
 RTC
 BOOTLOADER
 PROJECT STRUCTURE
+
+
+// "target.bootloader_img": "../bootloader/BUILD/NRF52840_DK/GCC_ARM/bootloader_update.bin",
+
+            "target.mbed_app_start": "0x20000", 

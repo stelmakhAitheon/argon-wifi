@@ -478,7 +478,8 @@ inline int Muxer<StreamT, MutexT>::waitWritable(Channel* chan, unsigned int time
                 }
             }
         }
-        GSM0710_LOG_DEBUG(ERROR, "Channel %u is still not writable after waiting for %u ms", chan->channel, timeout);
+        // GSM0710_LOG_DEBUG(ERROR, "Channel %u is still not writable after waiting for %u ms", chan->channel, timeout);
+        LOG(INFO, "Channel %u is still not writable after waiting for %u ms", chan->channel, timeout);
     }
     return GSM0710_ERROR_FLOW_CONTROL;
 }
@@ -665,6 +666,7 @@ inline int Muxer<StreamT, MutexT>::processInputData() {
                     // Consume erroneous flag and address bytes
                     // Go back to Idle state
                     GSM0710_LOG_DEBUG(ERROR, "Invalid address, EA bit is not set (%02x)", frame_.address);
+                    LOG(INFO, "Invalid address, EA bit is not set");
                     consume(2);
                     transition(State::Idle);
                 } else {
@@ -697,6 +699,7 @@ inline int Muxer<StreamT, MutexT>::processInputData() {
                     if ((frame_.length + frame_.hlen + 1) > inBufSize_) {
                         // The frame will not fit, consume any read data, go back into Idle state
                         GSM0710_LOG_DEBUG(ERROR, "Received frame will not fit into internal buffer");
+                         LOG(INFO, "Received frame will not fit into internal buffer");
                         consume(inBufData_);
                         transition(State::Idle);
                         break;
@@ -717,6 +720,7 @@ inline int Muxer<StreamT, MutexT>::processInputData() {
                 if ((frame_.length + frame_.hlen + 1) > inBufSize_) {
                     // The frame will not fit, consume any read data, go back into Idle state
                     GSM0710_LOG_DEBUG(ERROR, "Received frame will not fit into internal buffer");
+                    LOG(INFO, "Received frame will not fit into internal buffer");
                     consume(inBufData_);
                     transition(State::Idle);
                     break;
@@ -747,6 +751,7 @@ inline int Muxer<StreamT, MutexT>::processInputData() {
                     channelDataResult = processChannelData();
                 } else {
                     GSM0710_LOG_DEBUG(ERROR, "Invalid FCS");
+                    // LOG(INFO, "FCS");
                 }
 
                 // Consume all the parsed data
@@ -816,6 +821,8 @@ inline int Muxer<StreamT, MutexT>::processTimeouts() {
                                 chan->retries, getMaxRetransmissions(), chan->channel);
                         CHECK(commandSend(c, proto::DISC | proto::PF));
                     } else {
+                        LOG(TRACE, "(%d/%d) Trying to open channel %u",
+                                chan->retries, getMaxRetransmissions(), chan->channel);
                         GSM0710_LOG_DEBUG(TRACE, "(%d/%d) Trying to open channel %u",
                                 chan->retries, getMaxRetransmissions(), chan->channel);
                         CHECK(commandSend(c, proto::SABM | proto::PF));
@@ -824,9 +831,9 @@ inline int Muxer<StreamT, MutexT>::processTimeouts() {
                     timeout = std::min<decltype(timeout)>(timeout, getAckTimeout());
                 } else {
                     if (chan->state == ChannelState::Closing) {
-                        GSM0710_LOG_DEBUG(ERROR, "Failed to close channel %u", chan->channel);
+                        LOG(ERROR, "Failed to close channel %u", chan->channel);
                     } else {
-                        GSM0710_LOG_DEBUG(ERROR, "Failed to open channel %u", chan->channel);
+                        LOG(ERROR, "Failed to open channel %u", chan->channel);
                     }
                     channelTransition(chan, ChannelState::Error);
                 }
@@ -915,7 +922,7 @@ inline int Muxer<StreamT, MutexT>::processChannelData() {
                     }
                 }
             } else {
-                GSM0710_LOG_DEBUG(WARN, "Received UA on an unknown channel %u, ignoring", channel);
+                LOG(WARN, "Received UA on an unknown channel %u, ignoring", channel);
             }
             break;
         }
@@ -925,7 +932,7 @@ inline int Muxer<StreamT, MutexT>::processChannelData() {
             if (c) {
                 channelTransition(c, ChannelState::Closed);
             } else {
-                GSM0710_LOG_DEBUG(WARN, "Received DM on an unknown channel %u, ignoring", channel);
+                LOG(WARN, "Received DM on an unknown channel %u, ignoring", channel);
             }
             break;
         }
@@ -933,9 +940,9 @@ inline int Muxer<StreamT, MutexT>::processChannelData() {
             GSM0710_LOG_DEBUG(TRACE, "DISC");
             if (!c || c->state == ChannelState::Closed) {
                 if (!c) {
-                    GSM0710_LOG_DEBUG(WARN, "Received DISC on an unknown channel %u, replying with DM", channel);
+                    LOG(WARN, "Received DISC on an unknown channel %u, replying with DM", channel);
                 } else {
-                    GSM0710_LOG_DEBUG(WARN, "Received DISC for a closed channel %u, replying with DM", channel);
+                    LOG(WARN, "Received DISC for a closed channel %u, replying with DM", channel);
                 }
                 responseSend(channel, proto::DM | proto::PF);
             } else {
@@ -969,6 +976,7 @@ inline int Muxer<StreamT, MutexT>::processChannelData() {
                         auto ctx = c->handlerCtx;
                         lk.unlock();
                         h(frame_.data, frame_.length, ctx);
+                        // LOG(INFO, "NEW DATA ON CHANNEL = %u, size = %u", channel, frame_.length);
                     } else {
                         GSM0710_LOG_DEBUG(TRACE, "Frame ignored, no channel data handler set");
                     }
@@ -1220,6 +1228,7 @@ inline int Muxer<StreamT, MutexT>::sendChannel(uint8_t channel, uint8_t control,
         sent += CHECK(stream_->write((const char*)header + sent, hlen - sent));
         if ((portable::getMillis() - t1) > getControlResponseTimeout() * 2) {
             GSM0710_LOG_DEBUG(ERROR, "Timeout writing into stream");
+            LOG(ERROR, "Timeout writing into stream");
             return GSM0710_ERROR_FLOW_CONTROL;
         }
         // CHECK(stream_->waitEvent(StreamT::WRITABLE, std::max<int>(0, getControlResponseTimeout() * 2 - (portable::getMillis() - t1))));
@@ -1233,6 +1242,7 @@ inline int Muxer<StreamT, MutexT>::sendChannel(uint8_t channel, uint8_t control,
             sent += CHECK(stream_->write((const char*)data + sent, len - sent));
             if ((portable::getMillis() - t1) > getControlResponseTimeout() * 2) {
                 GSM0710_LOG_DEBUG(ERROR, "Timeout writing into stream");
+                LOG(ERROR, "Timeout writing into stream");
                 return GSM0710_ERROR_FLOW_CONTROL;
             }
             // CHECK(stream_->waitEvent(StreamT::WRITABLE, std::max<int>(0, getControlResponseTimeout() * 2 - (portable::getMillis() - t1))));
@@ -1246,6 +1256,7 @@ inline int Muxer<StreamT, MutexT>::sendChannel(uint8_t channel, uint8_t control,
         sent += CHECK(stream_->write((const char*)footer + sent, sizeof(footer) - sent));
         if ((portable::getMillis() - t1) > getControlResponseTimeout() * 2) {
             GSM0710_LOG_DEBUG(ERROR, "Timeout writing into stream");
+            LOG(ERROR, "Timeout writing into stream");
             return GSM0710_ERROR_FLOW_CONTROL;
         }
         // CHECK(stream_->waitEvent(StreamT::WRITABLE, std::max<int>(0, getControlResponseTimeout() * 2 - (portable::getMillis() - t1))));
