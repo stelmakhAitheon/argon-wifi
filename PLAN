@@ -6,3 +6,7 @@ PROJECT STRUCTURE
 // "target.bootloader_img": "../bootloader/BUILD/NRF52840_DK/GCC_ARM/bootloader_update.bin",
 
             "target.mbed_app_start": "0x20000", 
+
+
+                        "target.app_offset": "0x20000", 
+            "target.bootloader_img": "../bootloader/BUILD/NRF52840_DK/GCC_ARM/bootloader_update.bin",

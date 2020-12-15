@@ -7,6 +7,10 @@
 #include "Common.h"
 #include "ParticleEsp32.h"
 
+#include "TLSSocketWrapper.h"
+
+#include "Websocket.h"
+
 
 EthernetInterface *net;
 SocketAddress a;
@@ -40,59 +44,78 @@ void wifi_socket_example() {
     Logger::getInstance()->addMessage("ip = %s \r\n", ip ? ip : "PZDC");
 
     // SocketAddress a;
-    net->gethostbyname("google.com", &a);
+    net->gethostbyname("portquiz.net", &a);
     Logger::getInstance()->addMessage("IP address google is: %s \r\n", a.get_ip_address() ? a.get_ip_address() : "No IP");
 
     a.set_port(80);
 
-    Thread *thread = new Thread();
-    thread->start([] {
-        while(true) {
-            // EthernetInterface net(*Esp32Emac::getInstance());
+    TCPSocket socket;
+    TLSSocketWrapper wrap(static_cast<Socket*>(&socket));
+    nsapi_error_t error = socket.open(net);
 
-            SocketAddress b;
-            net->gethostbyname("google.com", &b);
-            Logger::getInstance()->addMessage("IP address google is: %s \r\n", b.get_ip_address() ? b.get_ip_address() : "No IP");
+    Logger::getInstance()->addMessage("res =  %u \r\n", error);
 
-            TCPSocket socket;
-            nsapi_error_t error = socket.open(net);
-            Logger::getInstance()->addMessage("socket open = %d \r\n", error);
-            // error = socket.connect("google.com", 80);
-            error = socket.connect(a);
-            Logger::getInstance()->addMessage("socket connect = %d \r\n", error);
-            if (error < 0) {
-                Logger::getInstance()->addMessage("FAIL CONNECT to google \r\n");
-                // net.connect();
-            }
-            else
-                Logger::getInstance()->addMessage("CONNECTED to google \r\n");
-            error = socket.close();
-            Logger::getInstance()->addMessage("socket close = %d \r\n", error);
+    Websocket ws("ws://portquiz.net:8080/", net);
+    Logger::getInstance()->addMessage("WEBSOCKET host = %s port = %u \r\n", ws.host, ws.port);
+    
+    int connect_error = ws.connect();
+    Logger::getInstance()->addMessage("WEBSOCKET connect = %d \r\n", connect_error);
 
-            ThisThread::sleep_for(5000);
-        }
-    });
+    // int error_c = ws.send("Hello World\r\n");
+    char hohoho[10000] = {0,};
+    int error_c = ws.read(hohoho);
 
-    Thread *thread2 = new Thread();
-    thread2->start([] {
-        while(true) {
+    Logger::getInstance()->addMessage("WEBSOCKET ec = %d  \r\n", error_c);
+
+
+    // Thread *thread = new Thread();
+    // thread->start([] {
+    //     while(true) {
+    //         // EthernetInterface net(*Esp32Emac::getInstance());
+
+    //         SocketAddress b;
+    //         net->gethostbyname("google.com", &b);
+    //         Logger::getInstance()->addMessage("IP address google is: %s \r\n", b.get_ip_address() ? b.get_ip_address() : "No IP");
+
+    //         TCPSocket socket;
+    //         nsapi_error_t error = socket.open(net);
+    //         Logger::getInstance()->addMessage("socket open = %d \r\n", error);
+    //         // error = socket.connect("google.com", 80);
+    //         error = socket.connect(a);
+    //         Logger::getInstance()->addMessage("socket connect = %d \r\n", error);
+    //         if (error < 0) {
+    //             Logger::getInstance()->addMessage("FAIL CONNECT to google \r\n");
+    //             // net.connect();
+    //         }
+    //         else
+    //             Logger::getInstance()->addMessage("CONNECTED to google \r\n");
+    //         error = socket.close();
+    //         Logger::getInstance()->addMessage("socket close = %d \r\n", error);
+
+    //         ThisThread::sleep_for(5000);
+    //     }
+    // });
+
+    // Thread *thread2 = new Thread();
+    // thread2->start([] {
+    //     while(true) {
             
-            Logger::getInstance()->addMessage("MAC = %s \r\n", ParticleEsp32::getInstance()->getMACAddress());
-            Logger::getInstance()->addMessage("MAC2 = %s \r\n", net->get_mac_address());
-            ThisThread::sleep_for(15000);
-        }
-    });
+    //         Logger::getInstance()->addMessage("MAC = %s \r\n", ParticleEsp32::getInstance()->getMACAddress());
+    //         Logger::getInstance()->addMessage("MAC2 = %s \r\n", net->get_mac_address());
+    //         ThisThread::sleep_for(15000);
+    //     }
+    // });
 
-    Thread *thread3 = new Thread();
+    // Thread *thread3 = new Thread();
 
-    thread3->start([] {
-        while(true) {
-            // EthernetInterface net(*Esp32Emac::getInstance());
+    // thread3->start([] {
+    //     while(true) {
+    //         // EthernetInterface net(*Esp32Emac::getInstance());
             
-            Logger::getInstance()->addMessage("connection status = %d\r\n", net->get_connection_status());
-            ThisThread::sleep_for(15000);
-        }
-    });
+    //         Logger::getInstance()->addMessage("connection status = %d\r\n", net->get_connection_status());
+    //         ThisThread::sleep_for(15000);
+    //     }
+    // });
 
 
 
