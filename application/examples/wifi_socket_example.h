@@ -12,7 +12,29 @@
 #include "Websocket.h"
 
 #include "http_request.h"
+#include "https_request.h"
 //#include "network-helper.h"
+
+       const char SSL_CA_PEM[] = R"(-----BEGIN CERTIFICATE-----
+MIIDQTCCAimgAwIBAgITBmyfz5m/jAo54vB4ikPmljZbyjANBgkqhkiG9w0BAQsF
+ADA5MQswCQYDVQQGEwJVUzEPMA0GA1UEChMGQW1hem9uMRkwFwYDVQQDExBBbWF6
+b24gUm9vdCBDQSAxMB4XDTE1MDUyNjAwMDAwMFoXDTM4MDExNzAwMDAwMFowOTEL
+MAkGA1UEBhMCVVMxDzANBgNVBAoTBkFtYXpvbjEZMBcGA1UEAxMQQW1hem9uIFJv
+b3QgQ0EgMTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBALJ4gHHKeNXj
+ca9HgFB0fW7Y14h29Jlo91ghYPl0hAEvrAIthtOgQ3pOsqTQNroBvo3bSMgHFzZM
+9O6II8c+6zf1tRn4SWiw3te5djgdYZ6k/oI2peVKVuRF4fn9tBb6dNqcmzU5L/qw
+IFAGbHrQgLKm+a/sRxmPUDgH3KKHOVj4utWp+UhnMJbulHheb4mjUcAwhmahRWa6
+VOujw5H5SNz/0egwLX0tdHA114gk957EWW67c4cX8jJGKLhD+rcdqsq08p8kDi1L
+93FcXmn/6pUCyziKrlA4b9v7LWIbxcceVOF34GfID5yHI9Y/QCB/IIDEgEw+OyQm
+jgSubJrIqg0CAwEAAaNCMEAwDwYDVR0TAQH/BAUwAwEB/zAOBgNVHQ8BAf8EBAMC
+AYYwHQYDVR0OBBYEFIQYzIU07LwMlJQuCFmcx7IQTgoIMA0GCSqGSIb3DQEBCwUA
+A4IBAQCY8jdaQZChGsV2USggNiMOruYou6r4lK5IpDB/G/wkjUu0yKGX9rbxenDI
+U5PMCCjjmCXPI6T53iHTfIUJrU6adTrCC2qJeHZERxhlbI1Bjjt/msv0tadQ1wUs
+N+gDS63pYaACbvXy8MWy7Vu33PqUXHeeE6V/Uq2V8viTO96LXFvKWlJbYK8U90vv
+o/ufQJVtMVT8QtPHRh8jrdkPSHCa2XV4cdFyQzR1bldZwgJcJmApzyMZFo6IQ6XU
+5MsI+yMRQ+hDKXJioaldXgjUkK642M4UwtBV8ob2xJNDd2ZhwLnoQdeXeGADbkpy
+rqXRfboQnoZsG4q5WTP468SQvvG5
+-----END CERTIFICATE-----)";
 
 
 EthernetInterface *net;
@@ -58,47 +80,62 @@ void wifi_socket_example() {
     Logger::getInstance()->addMessage("ip = %s \r\n", ip ? ip : "PZDC");
 
     // SocketAddress a;
-    net->gethostbyname("httpbin.org", &a);
-    Logger::getInstance()->addMessage("IP address http://httpbin.org/status/418 is: %s \r\n", a.get_ip_address() ? a.get_ip_address() : "No IP");
+    // net->gethostbyname("httpbin.org", &a);
+    // Logger::getInstance()->addMessage("IP address http://httpbin.org/status/418 is: %s \r\n", a.get_ip_address() ? a.get_ip_address() : "No IP");
 
-    a.set_port(80);
+    // a.set_port(80);
 
-    TCPSocket socket;
-    TLSSocketWrapper wrap(static_cast<Socket*>(&socket));
-    nsapi_error_t error = socket.open(net);
+    // TCPSocket socket;
+    // TLSSocketWrapper wrap(static_cast<Socket*>(&socket));
+    // nsapi_error_t error = socket.open(net);
 
-    Logger::getInstance()->addMessage("res =  %u \r\n", error);
+    // Logger::getInstance()->addMessage("res =  %u \r\n", error);
 
     //char* url = "wss://echo.websocket.org";
    // strcat(url,a.get_ip_address());
 
 
-          HttpRequest* get_req = new HttpRequest(net, HTTP_GET, "http://httpbin.org/status/418");
+        // HttpRequest* get_req = new HttpRequest(net, HTTP_GET, "http://httpbin.org/status/418");
  
-        HttpResponse* get_res = get_req->send();
-        if (!get_res) {
-            printf("HttpRequest failed (error code %d)\n", get_req->get_error());
-        }
+        // HttpResponse* get_res = get_req->send();
+        // if (!get_res) {
+        //     printf("HttpRequest failed (error code %d)\n", get_req->get_error());
+        // }
  
-        printf("\n----- HTTP GET response -----\n");
-        dump_response(get_res);
+        // printf("\n----- HTTP GET response -----\n");
+        // dump_response(get_res);
 
-
-
-    Websocket ws("ws://echo.websocket.org:8080/", net, a);
-    Logger::getInstance()->addMessage("WEBSOCKET host = %s port = %u \r\n", ws.host, ws.port);
+    SocketAddress addr;
+    net->gethostbyname("8.8.8.8", &addr);
+    Logger::getInstance()->addMessage("res ip = %s \r\n", addr.get_ip_address());
     
-    int connect_error = ws.connect();
-    Logger::getInstance()->addMessage("WEBSOCKET connect = %d \r\n", connect_error);
+    HttpsRequest* get_req = new HttpsRequest(net, SSL_CA_PEM, HTTP_GET, "https://drive.google.com/u/0/uc?id=1IXaNXA6bbHOopm-w-HjiKa2jhzHXGVOr&export=download");
+    // HttpRequest* get_req = new HttpRequest(net, HTTP_GET, "http://httpbin.org/status/418");
 
-    if(connect_error)
-    {
-        // int error_c = ws.send("Hello World\r\n");
-        char* hohoho = new char[10000];
-        int error_c = ws.read(hohoho);
-
-        Logger::getInstance()->addMessage("WEBSOCKET ec = %d  \r\n", error_c);
+    HttpResponse* get_res = get_req->send();
+    if (!get_res) {
+        printf("HttpRequest failed (error code %d)\n", get_req->get_error());
     }
+
+    printf("\n----- HTTP GET response -----\n");
+    dump_response(get_res);
+
+
+
+    // Websocket ws("ws://echo.websocket.org:8080/", net, a);
+    // Logger::getInstance()->addMessage("WEBSOCKET host = %s port = %u \r\n", ws.host, ws.port);
+    
+    // int connect_error = ws.connect();
+    // Logger::getInstance()->addMessage("WEBSOCKET connect = %d \r\n", connect_error);
+
+    // if(connect_error)
+    // {
+    //     // int error_c = ws.send("Hello World\r\n");
+    //     char* hohoho = new char[10000];
+    //     int error_c = ws.read(hohoho);
+
+    //     Logger::getInstance()->addMessage("WEBSOCKET ec = %d  \r\n", error_c);
+    // }
 
 
 
