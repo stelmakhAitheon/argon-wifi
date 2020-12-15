@@ -11,12 +11,26 @@
 
 #include "Websocket.h"
 
+#include "http_request.h"
+//#include "network-helper.h"
+
 
 EthernetInterface *net;
 SocketAddress a;
 
 void test(nsapi_event_t event, intptr_t) {
     Logger::getInstance()->addMessage("test conn  \r\n");
+}
+
+
+void dump_response(HttpResponse* res) {
+    printf("Status: %d - %s\n", res->get_status_code(), res->get_status_message().c_str());
+ 
+    printf("Headers:\n");
+    for (size_t ix = 0; ix < res->get_headers_length(); ix++) {
+        printf("\t%s: %s\n", res->get_headers_fields()[ix]->c_str(), res->get_headers_values()[ix]->c_str());
+    }
+    printf("\nBody (%d bytes):\n\n%s\n", res->get_body_length(), res->get_body_as_string().c_str());
 }
 
 void wifi_socket_example() {
@@ -44,8 +58,8 @@ void wifi_socket_example() {
     Logger::getInstance()->addMessage("ip = %s \r\n", ip ? ip : "PZDC");
 
     // SocketAddress a;
-    net->gethostbyname("portquiz.net", &a);
-    Logger::getInstance()->addMessage("IP address google is: %s \r\n", a.get_ip_address() ? a.get_ip_address() : "No IP");
+    net->gethostbyname("httpbin.org", &a);
+    Logger::getInstance()->addMessage("IP address http://httpbin.org/status/418 is: %s \r\n", a.get_ip_address() ? a.get_ip_address() : "No IP");
 
     a.set_port(80);
 
@@ -55,17 +69,37 @@ void wifi_socket_example() {
 
     Logger::getInstance()->addMessage("res =  %u \r\n", error);
 
-    Websocket ws("ws://portquiz.net:8080/", net);
+    //char* url = "wss://echo.websocket.org";
+   // strcat(url,a.get_ip_address());
+
+
+          HttpRequest* get_req = new HttpRequest(net, HTTP_GET, "http://httpbin.org/status/418");
+ 
+        HttpResponse* get_res = get_req->send();
+        if (!get_res) {
+            printf("HttpRequest failed (error code %d)\n", get_req->get_error());
+        }
+ 
+        printf("\n----- HTTP GET response -----\n");
+        dump_response(get_res);
+
+
+
+    Websocket ws("ws://echo.websocket.org:8080/", net, a);
     Logger::getInstance()->addMessage("WEBSOCKET host = %s port = %u \r\n", ws.host, ws.port);
     
     int connect_error = ws.connect();
     Logger::getInstance()->addMessage("WEBSOCKET connect = %d \r\n", connect_error);
 
-    // int error_c = ws.send("Hello World\r\n");
-    char hohoho[10000] = {0,};
-    int error_c = ws.read(hohoho);
+    if(connect_error)
+    {
+        // int error_c = ws.send("Hello World\r\n");
+        char* hohoho = new char[10000];
+        int error_c = ws.read(hohoho);
 
-    Logger::getInstance()->addMessage("WEBSOCKET ec = %d  \r\n", error_c);
+        Logger::getInstance()->addMessage("WEBSOCKET ec = %d  \r\n", error_c);
+    }
+
 
 
     // Thread *thread = new Thread();

@@ -16,8 +16,9 @@
 
 #define INFO(x, ...) printf(x, ##__VA_ARGS__); 
 
-Websocket::Websocket(char * url, NetworkInterface * iface) {
+Websocket::Websocket(char * url, NetworkInterface * iface, SocketAddress& _address) {
     fillFields(url);
+    address = _address;
     socket.open(iface);
     socket.set_timeout(400);
 }
@@ -58,6 +59,7 @@ int Websocket::parseURL(const char* url, char* scheme, size_t maxSchemeLen, char
   }
   memcpy(scheme, schemePtr, hostPtr - schemePtr);
   scheme[hostPtr - schemePtr] = '\0';
+
 
   hostPtr+=3;
 
@@ -123,7 +125,8 @@ int Websocket::parseURL(const char* url, char* scheme, size_t maxSchemeLen, char
 bool Websocket::connect() {
     char cmd[200];
 
-    nsapi_error_t err = socket.connect(host, port);
+    //nsapi_error_t err = socket.connect(host, port);
+    nsapi_error_t err = socket.connect(address);
 
     if(err < 0) {
         ERR("Unable to connect to (%s) on port (%d), err = %d", host, port, err);
@@ -343,7 +346,10 @@ int Websocket::read(char * str, int len, int min_len) {
     for (int j = 0; j < MAX_TRY_WRITE; j++) {
 
         if ((res = socket.recv(str + idx, len - idx)) < 0)
+        {
+        printf("socket recv res=%d", res);
           continue;
+        }
 
         idx += res;
         

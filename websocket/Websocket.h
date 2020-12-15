@@ -71,7 +71,7 @@ class Websocket
         *
         * @param url The Websocket url in the form "ws://ip_domain[:port]/path" (by default: port = 80)
         */
-        Websocket(char * url, NetworkInterface * iface);
+        Websocket(char * url, NetworkInterface * iface, SocketAddress& _address);
 
         /**
         * Connect to the websocket url
@@ -126,6 +126,7 @@ class Websocket
         char path[64];
         
         TCPSocket socket;
+        SocketAddress address;
 
         int read(char * buf, int len, int min_len = -1);
         int write(char * buf, int len);
