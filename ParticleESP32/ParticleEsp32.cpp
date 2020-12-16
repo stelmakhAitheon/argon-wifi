@@ -26,9 +26,9 @@ void ParticleEsp32::reset() {
     _serial->set_baud(_baudrate);
     _wifiIo0->write(1);
     _wifiEn->write(0);
-    ThisThread::sleep_for(1000);
+    ThisThread::sleep_for(3000);
     _wifiEn->write(1);
-    SerialUtil::skipAll(_serial, 1000);
+    SerialUtil::skipAll(_serial, 2000);
 }
 
 void ParticleEsp32::off() {
