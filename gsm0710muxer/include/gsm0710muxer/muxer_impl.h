@@ -699,7 +699,7 @@ inline int Muxer<StreamT, MutexT>::processInputData() {
                     if ((frame_.length + frame_.hlen + 1) > inBufSize_) {
                         // The frame will not fit, consume any read data, go back into Idle state
                         GSM0710_LOG_DEBUG(ERROR, "Received frame will not fit into internal buffer");
-                         LOG(INFO, "Received frame will not fit into internal buffer");
+                        LOG(INFO, "Received frame will not fit into internal buffer");
                         consume(inBufData_);
                         transition(State::Idle);
                         break;

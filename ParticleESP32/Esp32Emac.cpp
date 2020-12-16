@@ -13,7 +13,7 @@ Esp32Emac *Esp32Emac::getInstance() {
 }
 
 uint32_t Esp32Emac::get_mtu_size() const {
-    return 1536U;
+    return 1500U;
 }
 
 uint32_t Esp32Emac::get_align_preference() const {
@@ -22,7 +22,7 @@ uint32_t Esp32Emac::get_align_preference() const {
 
 void Esp32Emac::get_ifname(char *name, uint8_t size) const {
     MBED_ASSERT(name != NULL);
-    strncpy(name, "r0", size);
+    strncpy(name, "wl", size);
 }
 
 uint8_t Esp32Emac::get_hwaddr_size() const {

@@ -45,17 +45,25 @@ bool ParticleEsp32::waitReady() {
 
     CHECK_TRUE(checkAt(), false);
     SerialUtil::skipAll(_serial, 1000);
+    Logger::getInstance()->addMessage("before initReady \r\n");
     CHECK_TRUE(initReady(), false);
+    Logger::getInstance()->addMessage("after initReady \r\n");
     return true;
 }
 
 bool ParticleEsp32::initReady() {
+    Logger::getInstance()->addMessage("before start mux \r\n");
     CHECK_TRUE(_atParser->send("AT+CMUX=0"), false);
     CHECK_TRUE(_atParser->recv("OK"), false);
-
+    Logger::getInstance()->addMessage("before initMuxer \r\n");
     CHECK_TRUE(initMuxer(), false);
-
-    return _parser->send("AT+CWDHCP=0,3") && _parser->recv("OK");
+    Logger::getInstance()->addMessage("before send  AT+CWDHCP=0,3 \r\n");
+    for(int i = 0; i < 5; i++) {
+        if(_parser->send("AT+CWDHCP=0,3") && _parser->recv("OK"))
+            return true;
+        Logger::getInstance()->addMessage("AT+CWDHCP FAIL = %d \r\n", i);
+    }
+    return false;
 }
 
 bool ParticleEsp32::initMuxer() {
@@ -82,13 +90,23 @@ bool ParticleEsp32::initMuxer() {
         return false;
     } 
     _muxer->resumeChannel(PARTICLE_ESP32_NCP_STA_CHANNEL);
-    
-    return _parser->send("AT") && _parser->recv("OK");
+    Logger::getInstance()->addMessage("before send AT + recv OK \r\n");
+    for(int i = 0; i < 5; i++) {
+        if(_parser->send("AT") && _parser->recv("OK"))
+            return true;
+        Logger::getInstance()->addMessage("send AT + recv OK FAIL = %d \r\n", i);
+    }
+    return false;
 }
 
 bool ParticleEsp32::init() {
     reset();
-    CHECK_TRUE(waitReady(), false);
+    // CHECK_TRUE(waitReady(), false);
+    while(!waitReady()) {
+        Logger::getInstance()->addMessage("muxer waitReady failed isRun = %d isStop = %d\r\n", (int)_muxer->isRunning(), (int)_muxer->isStopping());
+        ThisThread::sleep_for(3000);
+        reset();
+    }
     return true;
 }
 
