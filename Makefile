@@ -56,10 +56,13 @@ init: clean
 	mbed deploy
 
 cmphex:
-	$(call COMPILE_PREFFIX) 
-	mbed compile $(MBED_CLI_FLAGS) 
-	$(call COMPILE_SUFFIX) 
-	nrfjprog --reset --program $(FULL_OUTPUT_HEX) --chiperase
+	$(call COMPILE_PREFFIX)
+	mbed compile $(MBED_CLI_FLAGS)
+	$(call COMPILE_SUFFIX)
+	nrfutil pkg generate --application $(FULL_OUTPUT_HEX) --application-version $(APP_VERSION) \
+	--hw-version 52 --sd-req 0xCA --key-file $(KEY_PATH)/$(KEY_FILE) $(OUTPUT_PATH)/package.zip
+	sudo nrfutil dfu usb-serial -pkg $(OUTPUT_PATH)/package.zip -p /dev/ttyACM1 -b 115200
+	# nrfjprog --reset --program $(FULL_OUTPUT_HEX) --chiperase
 
 compile: $(KEY_PATH)/$(KEY_FILE)
 	$(call COMPILE_PREFFIX) 

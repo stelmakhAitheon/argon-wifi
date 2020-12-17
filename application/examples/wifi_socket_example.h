@@ -12,8 +12,7 @@
 #include "Websocket.h"
 
 #include "http_request.h"
-#include "https_request.h"
-//#include "network-helper.h"
+//#include "https_request.h"
 
        const char SSL_CA_PEM[] = R"(-----BEGIN CERTIFICATE-----
 MIIDQTCCAimgAwIBAgITBmyfz5m/jAo54vB4ikPmljZbyjANBgkqhkiG9w0BAQsF
@@ -39,6 +38,7 @@ rqXRfboQnoZsG4q5WTP468SQvvG5
 
 EthernetInterface *net;
 SocketAddress a;
+const SocketAddress google("8.8.8.8", 80);
 
 void test(nsapi_event_t event, intptr_t) {
     Logger::getInstance()->addMessage("test conn  \r\n");
@@ -69,8 +69,14 @@ void wifi_socket_example() {
 
     EMAC *my_emac = Esp32Emac::getInstance();
     net = new EthernetInterface(*my_emac);
+
+    net->disconnect();
     
     net->attach(test);
+
+    net->add_dns_server(google, "");
+    net->set_dhcp(true);
+
     nsapi_error_t result = net->connect();
     // net->'
     
@@ -80,22 +86,65 @@ void wifi_socket_example() {
     Logger::getInstance()->addMessage("ip = %s \r\n", ip ? ip : "PZDC");
 
     // SocketAddress a;
-    // net->gethostbyname("httpbin.org", &a);
-    // Logger::getInstance()->addMessage("IP address http://httpbin.org/status/418 is: %s \r\n", a.get_ip_address() ? a.get_ip_address() : "No IP");
 
-    // a.set_port(80);
+    const char* url = "192.168.1.150"; //"echo.websocket.org";
+    net->gethostbyname(url, &a);
+    Logger::getInstance()->addMessage("IP addressqweqw %s is: %s \r\n", url, a.get_ip_address() ? a.get_ip_address() : "No IP");
 
-    // TCPSocket socket;
-    // TLSSocketWrapper wrap(static_cast<Socket*>(&socket));
-    // nsapi_error_t error = socket.open(net);
+    if(a.get_ip_address())
+    {
+        a.set_port(3000);
 
-    // Logger::getInstance()->addMessage("res =  %u \r\n", error);
+        TCPSocket socket;
+        //socket.set_blocking(true);
+        //socket.set_timeout(10000);
+        //TLSSocketWrapper wrap(static_cast<Socket*>(&socket));
+        nsapi_error_t error = socket.open(net);
+
+        Logger::getInstance()->addMessage("res =  %u \r\n", error);
+
+
+        // auto err = socket.connect("echo.websocket.org:80");
+        // printf("socket err = %d", err);
+
+        // // Send data
+        // socket.send("GET / HTTP/1.1\r\n\r\n", 18);
+
+        // // Receive data
+        // char buf[100];
+        // socket.recv(buf, 100);
+
+        // printf("buf=%s", buf);
+
+        // // Close the socket
+        // socket.close();
+
+        //Websocket ws("wss://dev.aitheon.com:443/device-manager/", net, a);
+        Websocket ws("ws://192.168.1.150:3000/api/device-type/", net, a);
+        //3000
+        //Websocket ws("ws://192.168.1.147:8000/", net, a);
+        Logger::getInstance()->addMessage("WEBSOCKET host = %s port = %u \r\n", ws.host, ws.port);
+        
+        int connect_error = ws.connect();
+        Logger::getInstance()->addMessage("WEBSOCKET connect = %d \r\n", connect_error);
+
+        if(connect_error)
+        {
+            int er = ws.send("Hello World\r\n");
+            char* hohoho = new char[10000];
+            int error_c = ws.read(hohoho);
+
+            Logger::getInstance()->addMessage("WEBSOCKET ec = %d  \r\n", error_c);
+        }
+    }
+
 
     //char* url = "wss://echo.websocket.org";
    // strcat(url,a.get_ip_address());
 
 
-        // HttpRequest* get_req = new HttpRequest(net, HTTP_GET, "http://httpbin.org/status/418");
+        // HttpRequest* get_req = new HttpRequest(net, HTTP_GET, "http://192.168.1.150:3000/api/device-type/");//"http://httpbin.org/status/418");
+
  
         // HttpResponse* get_res = get_req->send();
         // if (!get_res) {
@@ -105,20 +154,6 @@ void wifi_socket_example() {
         // printf("\n----- HTTP GET response -----\n");
         // dump_response(get_res);
 
-    SocketAddress addr;
-    net->gethostbyname("8.8.8.8", &addr);
-    Logger::getInstance()->addMessage("res ip = %s \r\n", addr.get_ip_address());
-    
-    HttpsRequest* get_req = new HttpsRequest(net, SSL_CA_PEM, HTTP_GET, "https://drive.google.com/u/0/uc?id=1IXaNXA6bbHOopm-w-HjiKa2jhzHXGVOr&export=download");
-    // HttpRequest* get_req = new HttpRequest(net, HTTP_GET, "http://httpbin.org/status/418");
-
-    HttpResponse* get_res = get_req->send();
-    if (!get_res) {
-        printf("HttpRequest failed (error code %d)\n", get_req->get_error());
-    }
-
-    printf("\n----- HTTP GET response -----\n");
-    dump_response(get_res);
 
 
 

@@ -19,8 +19,10 @@
 Websocket::Websocket(char * url, NetworkInterface * iface, SocketAddress& _address) {
     fillFields(url);
     address = _address;
+    //printf("addddddddress: %s\n", address.get_addr());
     socket.open(iface);
-    socket.set_timeout(400);
+    socket.set_blocking(true);
+    socket.set_timeout(4000);
 }
 
 void Websocket::fillFields(char * url) {
@@ -118,14 +120,18 @@ int Websocket::parseURL(const char* url, char* scheme, size_t maxSchemeLen, char
   memcpy(path, pathPtr, pathLen);
   path[pathLen] = '\0';
 
+  printf("PATH=%s", path);
+
   return 0;
 }
 
 
 bool Websocket::connect() {
     char cmd[200];
+    char cmd2[200];
 
     //nsapi_error_t err = socket.connect(host, port);
+    //printf("addddddddress: %s\n", address.get_ip_address());
     nsapi_error_t err = socket.connect(address);
 
     if(err < 0) {
@@ -140,48 +146,72 @@ bool Websocket::connect() {
     // }
 
     // sent http header to upgrade to the ws protocol
-    sprintf(cmd, "GET %s HTTP/1.1\r\n", path);
-    write(cmd, strlen(cmd));
+    sprintf(cmd, "GET %s HTTP/1.1\r\n\r\n", path);
+    int ret = write(cmd, strlen(cmd));
+    printf("ret = %d\n", ret);
     
-    sprintf(cmd, "Host: %s:%d\r\n", host, port);
-    write(cmd, strlen(cmd));
+   sprintf(cmd, "Host: %s:%d\r\n", host, port);
+   ret = write(cmd, strlen(cmd));
+       printf("ret = %d\n", ret);
 
-    sprintf(cmd, "Upgrade: WebSocket\r\n");
-    write(cmd, strlen(cmd));
+
+    sprintf(cmd, "Upgrade: websocket\r\n");
+    ret = write(cmd, strlen(cmd));
+        printf("ret = %d\n", ret);
+
 
     sprintf(cmd, "Connection: Upgrade\r\n");
-    write(cmd, strlen(cmd));
+    ret = write(cmd, strlen(cmd));
+        printf("ret = %d\n", ret);
+
 
     sprintf(cmd, "Sec-WebSocket-Key: L159VM0TWUzyDxwJEIEzjw==\r\n");
-    write(cmd, strlen(cmd));
+    ret = write(cmd, strlen(cmd));
+            printf("ret = %d\n", ret);
 
-    sprintf(cmd, "Sec-WebSocket-Version: 13\r\n\r\n");
-    int ret = write(cmd, strlen(cmd));
+    sprintf(cmd, "Sec-WebSocket-Protocol: alpha-embedded\r\n");
+    ret = write(cmd, strlen(cmd));
+            printf("ret = %d\n", ret);
+
+
+    //sprintf(cmd, "Sec-WebSocket-Version: 13\r\n\r\n");
+    //ret = write(cmd, strlen(cmd));
+      //  printf("ret = %d\n", ret);
+
+    
     if (ret != strlen(cmd)) {
         close();
         ERR("Could not send request");
         return false;
     }
 
-    ret = read(cmd, 200, 100);
+
+    printf("cmd=%s\n", cmd);
+
+    ret = read(cmd2, 200, 50);
+        printf("ret = %d\n", ret);
+
+
+    printf("cmd2=%s\n", cmd2);
+
     if (ret < 0) {
         close();
-        ERR("Could not receive answer\r\n");
+        ERR("Could not receiveqqq answer\r\n");
         return false;
     }
 
-    cmd[ret] = '\0';
-    DBG("recv: %s\r\n", cmd);
+    cmd2[ret] = '\0';
+    DBG("recv: %s\r\n", cmd2);
 
-    if ( strstr(cmd, "DdLWT/1JcX+nQFHebYP+rqEx5xI=") == NULL ) {
-        ERR("Wrong answer from server, got \"%s\" instead\r\n", cmd);
+    if ( strstr(cmd2, "DdLWT/1JcX+nQFHebYP+rqEx5xI=") == NULL ) {
+        ERR("Wrong answer from server, got \"%s\" instead\r\n", cmd2);
         do {
-            ret = read(cmd, 200, 100);
+            ret = read(cmd2, 200, 1);
             if (ret < 0) {
-                ERR("Could not receive answer\r\n");
+                ERR("Could not receivewwww answer\r\n");
                 return false;
             }
-            cmd[ret] = '\0';
+            cmd2[ret] = '\0';
         } while (ret > 0);
         close();
         return false;
@@ -247,6 +277,7 @@ bool Websocket::read(char * message) {
     bool is_masked = false;
     Timer tmr;
 
+    printf("Websocket::read(char * message)");
     // read the opcode
     tmr.start();
     while (true) {
@@ -257,11 +288,11 @@ bool Websocket::read(char * message) {
 
         socket.set_timeout(1);
         if (socket.recv(&opcode, 1) != 1) {
-            socket.set_timeout(2000);
+            socket.set_timeout(200);
             return false;
         }
 
-        socket.set_timeout(2000);
+        socket.set_timeout(200);
 
         if (opcode == 0x81)
             break;
@@ -345,7 +376,7 @@ int Websocket::read(char * str, int len, int min_len) {
     
     for (int j = 0; j < MAX_TRY_WRITE; j++) {
 
-        if ((res = socket.recv(str + idx, len - idx)) < 0)
+        if ((res = socket.recvfrom(&address, str + idx, len - idx)) < 0)
         {
         printf("socket recv res=%d", res);
           continue;
