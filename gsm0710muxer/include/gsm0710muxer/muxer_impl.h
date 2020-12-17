@@ -169,7 +169,7 @@ inline int Muxer<StreamT, MutexT>::start(bool initiator, bool openZeroChannel) {
         // thread_.terminate();
         if(thread_)
             delete thread_;
-        thread_ = new rtos::Thread();
+        thread_ = new rtos::Thread();//osPriorityRealtime
         thread_->start(callback(this, &Muxer::run));
     }
 
@@ -193,7 +193,7 @@ inline int Muxer<StreamT, MutexT>::stop() {
         events_.set(EVENT_STOP);
     }
     // xEventGroupWaitBits(events_, EVENT_STOPPED, pdTRUE, pdFALSE, portMAX_DELAY);
-    events_.wait_any(EVENT_STOPPED);
+    events_.wait_any(EVENT_STOPPED, 1000);
 
     LOG(INFO, "GSM07.10 muxer stopped");
 

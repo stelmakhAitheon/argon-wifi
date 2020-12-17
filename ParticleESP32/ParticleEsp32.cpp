@@ -92,8 +92,9 @@ bool ParticleEsp32::initMuxer() {
     _muxer->resumeChannel(PARTICLE_ESP32_NCP_STA_CHANNEL);
     Logger::getInstance()->addMessage("before send AT + recv OK \r\n");
     for(int i = 0; i < 5; i++) {
-        if(_parser->send("AT") && _parser->recv("OK"))
+        if(_parser->send("AT") && _parser->recv("OK")) {
             return true;
+        }
         Logger::getInstance()->addMessage("send AT + recv OK FAIL = %d \r\n", i);
     }
     return false;
@@ -113,11 +114,13 @@ bool ParticleEsp32::init() {
 }
 
 const char *ParticleEsp32::getMACAddress(void) {
-    bool ret = _parser->send("AT+GETMAC=0")
-       && _parser->recv("+GETMAC: \"%32[^\"]\"", _macBuffer)
-       && _parser->recv("OK");
-    if(!ret)
-        return 0;
+    bool ret;
+    do {
+        ret = _parser->send("AT+GETMAC=0")
+        && _parser->recv("+GETMAC: \"%32[^\"]\"", _macBuffer)
+        && _parser->recv("OK");
+        Logger::getInstance()->addMessage("Trying get mac...\r\n");
+    } while(!ret);
     return _macBuffer;
 }
 

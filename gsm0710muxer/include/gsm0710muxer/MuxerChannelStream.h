@@ -94,5 +94,8 @@ template <typename MuxerT>
 int MuxerChannelStream<MuxerT>::channelDataCb(const uint8_t* data, size_t size, void* ctx) {
     auto self = (MuxerChannelStream<MuxerT>*)ctx;
     self->updateReadBuffer(data, size);
+    std::string message((char *)data, size);
+    Logger::getInstance()->addMessage("received %u size to AT channel \r\n data = %s\r\n", size, message.c_str());
+
     return 0;
 }

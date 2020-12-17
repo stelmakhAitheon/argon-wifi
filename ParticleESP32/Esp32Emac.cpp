@@ -17,6 +17,7 @@ uint32_t Esp32Emac::get_mtu_size() const {
 }
 
 uint32_t Esp32Emac::get_align_preference() const {
+    Logger::getInstance()->addMessage("get_align_preference \r\n");
     return 0;
 }
 
@@ -49,6 +50,7 @@ void Esp32Emac::set_hwaddr(const uint8_t *addr) {
 }
 
 bool Esp32Emac::power_up() {
+    Logger::getInstance()->addMessage("power_up \r\n");
     emac_link_state_cb(true);
     return true;
 }
@@ -68,12 +70,15 @@ void Esp32Emac::set_link_state_cb(emac_link_state_change_cb_t state_cb) {
 }
 
 void Esp32Emac::add_multicast_group(const uint8_t*) {
+    Logger::getInstance()->addMessage("add_multicast_group \r\n");
 }
 
 void Esp32Emac::remove_multicast_group(const uint8_t *address) {
+    Logger::getInstance()->addMessage("remove_multicast_group \r\n");
 }
 
 void Esp32Emac::set_all_multicast(bool) {
+    Logger::getInstance()->addMessage("set_all_multicast \r\n");
 }
 
 void Esp32Emac::set_memory_manager(EMACMemoryManager &mem_mngr) {
