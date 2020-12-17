@@ -219,7 +219,7 @@ private:
     bool waitStream(uint64_t millis);
 private:
     MutexT mutex_;
-    rtos::Thread thread_;
+    rtos::Thread *thread_;
     EventFlags events_;
     EventFlags channelEvents_;
     // EventFlags eventsStream_;

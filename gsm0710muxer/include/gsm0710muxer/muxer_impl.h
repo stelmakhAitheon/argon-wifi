@@ -59,6 +59,7 @@ inline bool validateFcs(uint8_t refFcs, const uint8_t* data, size_t len) {
 template<typename StreamT, typename MutexT>
 inline Muxer<StreamT, MutexT>::Muxer()
         : state_(State::Stopped) {
+        thread_ = nullptr;
 }
 
 template<typename StreamT, typename MutexT>
@@ -149,7 +150,7 @@ inline int Muxer<StreamT, MutexT>::start(bool initiator, bool openZeroChannel) {
         channelEvents_.clear();
         events_.clear();
         stream_->sigio(callback(this, &Muxer::streamStateChanged));
-
+        channelEvents_.clear(((EVENT_STATE_CHANGED << ((sizeof(channels_) / sizeof(channels_[0])) + 1)) - 1));
         // xEventGroupClearBits(channelEvents_,
                 // ((EVENT_STATE_CHANGED << ((sizeof(channels_) / sizeof(channels_[0])) + 1)) - 1));
 
@@ -165,7 +166,11 @@ inline int Muxer<StreamT, MutexT>::start(bool initiator, bool openZeroChannel) {
         //     transition(State::Error);
         //     return GSM0710_ERROR_UNKNOWN;
         // }
-        thread_.start(callback(this, &Muxer::run));
+        // thread_.terminate();
+        if(thread_)
+            delete thread_;
+        thread_ = new rtos::Thread();
+        thread_->start(callback(this, &Muxer::run));
     }
 
     if (initiator && openZeroChannel) {
@@ -177,7 +182,7 @@ inline int Muxer<StreamT, MutexT>::start(bool initiator, bool openZeroChannel) {
 
 template<typename StreamT, typename MutexT>
 inline int Muxer<StreamT, MutexT>::stop() {
-    if (!isRunning() && thread_.get_state() == rtos::Thread::State::Deleted) {
+    if (!isRunning()) { // thread_.get_state() == rtos::Thread::State::Deleted
         return GSM0710_ERROR_NONE;
     }
 
@@ -189,8 +194,6 @@ inline int Muxer<StreamT, MutexT>::stop() {
     }
     // xEventGroupWaitBits(events_, EVENT_STOPPED, pdTRUE, pdFALSE, portMAX_DELAY);
     events_.wait_any(EVENT_STOPPED);
-
-    // thread_ = nullptr;
 
     LOG(INFO, "GSM07.10 muxer stopped");
 
@@ -558,8 +561,6 @@ void Muxer<StreamT, MutexT>::run() {
 
     // xEventGroupSetBits(events_, EVENT_STOPPED);
     events_.set(EVENT_STOPPED);
-
-    // return 0;
 }
 
 template<typename StreamT, typename MutexT>
@@ -815,7 +816,7 @@ inline int Muxer<StreamT, MutexT>::processTimeouts() {
         if (chan->state == ChannelState::Closing || chan->state == ChannelState::Opening) {
             // Transitive state
             if ((portable::getMillis() - chan->timestamp) >= getAckTimeout()) {
-                if (chan->retries++ < getMaxRetransmissions()) {
+                if (chan->retries++ < getMaxRetransmissions()) { //&& c == 2
                     if (chan->state == ChannelState::Closing) {
                         GSM0710_LOG_DEBUG(TRACE, "(%d/%d) Trying to close channel %u",
                                 chan->retries, getMaxRetransmissions(), chan->channel);
@@ -1176,11 +1177,12 @@ inline typename Muxer<StreamT, MutexT>::Channel* Muxer<StreamT, MutexT>::getChan
 
 template<typename StreamT, typename MutexT>
 inline int Muxer<StreamT, MutexT>::waitChannelState(Channel* chan, ChannelState state) {
-    GSM0710_LOG_DEBUG(TRACE, "Waiting for channel %u in state %s to transition to %s",
-            chan->channel, chan->stateName(chan->state), chan->stateName(state));
+    // LOG(INFO, "Waiting for channel %u in state %s to transition to %s",
+    //         chan->channel, chan->stateName(chan->state), chan->stateName(state));
     while (isRunning() && chan->state != state && chan->state != ChannelState::Error) {
         // xEventGroupWaitBits(channelEvents_, EVENT_STATE_CHANGED << chan->channel, pdTRUE, pdFALSE, 100 / portTICK_RATE_MS);
-        channelEvents_.wait_any(EVENT_STATE_CHANGED << chan->channel, 100, true);
+        channelEvents_.wait_any(EVENT_STATE_CHANGED << chan->channel, 1000, true);
+        
     }
 
     return !(chan->state == state);
@@ -1396,8 +1398,8 @@ inline ssize_t Muxer<StreamT, MutexT>::consume(size_t size) {
 
 template<typename StreamT, typename MutexT>
 inline void Muxer<StreamT, MutexT>::transition(State state) {
-    GSM0710_LOG_DEBUG(TRACE, "Transitioning from state %s to state %s",
-            stateName(state_), stateName(state));
+    // LOG(INFO, "Transitioning from state %s to state %s",
+    //         stateName(state_), stateName(state));
     state_ = state;
     // xEventGroupSetBits(events_, EVENT_STATE_CHANGED);
     events_.set(EVENT_STATE_CHANGED);

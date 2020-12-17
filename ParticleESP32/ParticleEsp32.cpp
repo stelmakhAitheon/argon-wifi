@@ -100,6 +100,7 @@ bool ParticleEsp32::initMuxer() {
 }
 
 bool ParticleEsp32::init() {
+    _muxerReady = false;
     reset();
     // CHECK_TRUE(waitReady(), false);
     while(!waitReady()) {
@@ -107,6 +108,7 @@ bool ParticleEsp32::init() {
         ThisThread::sleep_for(3000);
         reset();
     }
+    _muxerReady = true;
     return true;
 }
 
@@ -134,7 +136,9 @@ bool ParticleEsp32::connect(const char *ap, const char *passPhrase) {
 int ParticleEsp32::muxChannelStateCb(uint8_t channel, MuxerType::ChannelState oldState,
         MuxerType::ChannelState newState, void* ctx) {
     
-    Logger::getInstance()->addMessage("muxChannelStateCb \r\n");
+    Logger::getInstance()->addMessage("muxChannelStateCb %d state = %d\r\n", (int)channel, (int)newState);
+
+    // return 0;
     auto self = (ParticleEsp32*)ctx;
 
     if (newState == MuxerType::ChannelState::Closed) {
@@ -142,7 +146,9 @@ int ParticleEsp32::muxChannelStateCb(uint8_t channel, MuxerType::ChannelState ol
             case 0:
                 // Muxer stopped
                 // self->disable();
-                Logger::getInstance()->addMessage("muxChannel 0 CLOSE \r\n");
+                Logger::getInstance()->addMessage("muxChannel 0 CLOSE restart muxer\r\n");
+                if(self->_muxerReady)
+                    self->init();
                 break;
             case PARTICLE_ESP32_NCP_STA_CHANNEL: {
                 // Notify that the underlying data channel closed

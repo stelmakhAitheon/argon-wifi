@@ -40,6 +40,7 @@ private:
     PinName _rts;
     PinName _cts;
     char _macBuffer[18];
+    bool _muxerReady;
 
     mbed::Callback<void(const uint8_t* data, size_t size)> _receiveDataCb;
 
