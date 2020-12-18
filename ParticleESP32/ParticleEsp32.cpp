@@ -12,7 +12,7 @@ ParticleEsp32::ParticleEsp32(PinName en, PinName io0, PinName tx, PinName rx, Pi
     _wifiEn = new DigitalOut(en);
     _wifiIo0 = new DigitalOut(io0);
     _baudrate = baudrate;
-    _serial = new mbed::UARTSerial(tx, rx, baudrate);
+    _serial = new UARTSerial(tx, rx, baudrate);
     _rts = rts;
     _cts = cts;
     _muxer = new MuxerType();
@@ -24,6 +24,7 @@ ParticleEsp32::ParticleEsp32(PinName en, PinName io0, PinName tx, PinName rx, Pi
 void ParticleEsp32::reset() {
     _serial->set_flow_control(SerialBase::RTSCTS, _rts, _cts);
     _serial->set_baud(_baudrate);
+    _serial->set_blocking(true);
     _wifiIo0->write(1);
     _wifiEn->write(0);
     ThisThread::sleep_for(3000);

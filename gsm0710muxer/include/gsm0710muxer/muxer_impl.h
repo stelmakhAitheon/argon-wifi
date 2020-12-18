@@ -409,7 +409,7 @@ inline int Muxer<StreamT, MutexT>::suspendChannel(uint8_t channel) {
         newState &= ~(proto::RTR);
         //solve
 #ifdef GSM0710_FLOW_CONTROL_RTR
-        newState &= ~(proto::RTR);
+        // newState &= ~(proto::RTR);
         //need solve
 #endif // GSM0710_FLOW_CONTROL_RTR
         if (newState != c->localModemState) {
@@ -521,8 +521,8 @@ void Muxer<StreamT, MutexT>::run() {
 //             break;
 //         }
 // #endif // GSM0710_SHARED_STREAM_EVENT_GROUP
-        // auto ev = eventsStream_.wait_any(EVENT_INPUT_DATA | EVENT_STOP | EVENT_WAKEUP, nextTimeout, true);
         auto ev = events_.wait_any(EVENT_INPUT_DATA | EVENT_STOP | EVENT_WAKEUP, nextTimeout, true);
+        // auto ev = events_.wait_any(EVENT_INPUT_DATA | EVENT_STOP | EVENT_WAKEUP, nextTimeout, true);
         if(ev & osFlagsError) {
             ev = 0;
         }
@@ -540,11 +540,7 @@ void Muxer<StreamT, MutexT>::run() {
             }
         }
 
-// #if !defined(GSM0710_PUMP_INPUT_DATA)
         if (ev & EVENT_INPUT_DATA) {
-// #else
-        // {
-// #endif // !defined(GSM0710_PUMP_INPUT_DATA)
             if (processInputData() < 0) {
                 transition(State::Error);
                 break;
@@ -773,15 +769,6 @@ inline int Muxer<StreamT, MutexT>::processInputData() {
             // There is some critical stuff we might need to do while we are parsing incoming data
             while (isRunning() && CHECK(processTimeouts()) == 0) {
             }
-// #ifdef GSM0710_RELAX_WHEN_CHANNEL_IN_FLOW_CONTROL
-//             if (channelDataResult == GSM0710_ERROR_FLOW_CONTROL) {
-//                 // Not an error, we need to relax a bit.
-//                 // Waiting for a wakeup or up to GSM0710_RELAX_WHEN_CHANNEL_IN_FLOW_CONTROL ms
-//                 xEventGroupWaitBits(events_, EVENT_WAKEUP, pdFALSE, pdFALSE, GSM0710_RELAX_WHEN_CHANNEL_IN_FLOW_CONTROL / portTICK_RATE_MS);
-                
-//             }
-// #endif // GSM0710_RELAX_WHEN_CHANNEL_IN_FLOW_CONTROL
-
             if (channelDataResult == GSM0710_ERROR_FLOW_CONTROL) {
                 // Not an error, we need to relax a bit.
                 // Waiting for a wakeup or up to GSM0710_RELAX_WHEN_CHANNEL_IN_FLOW_CONTROL ms
@@ -1342,14 +1329,14 @@ inline int Muxer<StreamT, MutexT>::modemStatusSend(Channel* c) {
     // LOG(INFO, "Sending local modem status on channel %u", c->channel);
     //need solve
 // #if !defined(GSM0710_MODEM_STATUS_SEND_EMPTY_BREAK)
-    uint8_t buf[2] = {};
-    buf[0] = (c->channel << 2) | proto::EA | proto::CR;
-    buf[1] = (c->localModemState << 1) | proto::EA;
-// #else
-    // uint8_t buf[3] = {};
+    // uint8_t buf[2] = {};
     // buf[0] = (c->channel << 2) | proto::EA | proto::CR;
-    // buf[1] = (c->localModemState << 1);
-    // buf[2] = proto::EA;
+    // buf[1] = (c->localModemState << 1) | proto::EA;
+// #else
+    uint8_t buf[3] = {};
+    buf[0] = (c->channel << 2) | proto::EA | proto::CR;
+    buf[1] = (c->localModemState << 1);
+    buf[2] = proto::EA;
 // #endif // !defined(GSM0710_MODEM_STATUS_SEND_EMPTY_BREAK)
     return controlSend(proto::MSC, buf, sizeof(buf));
 }

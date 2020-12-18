@@ -4,6 +4,7 @@
 #include "MuxerChannelStream.h"
 #include "muxer.h"
 #include "SerialUtil.h"
+#include "UARTSerial.h"
 #include "Logger.h"
 
 #define PARTICLE_ESP32_EN                       P0_24
