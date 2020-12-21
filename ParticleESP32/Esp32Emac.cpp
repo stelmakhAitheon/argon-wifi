@@ -106,5 +106,5 @@ void Esp32Emac::receiveData(const uint8_t* data, size_t size) {
     void *payload = memory_manager->get_ptr(buf);
     memcpy(payload, data, size);
     emac_link_input_cb(buf);
-    memory_manager->free(buf);
+    // memory_manager->free(buf);
 }
